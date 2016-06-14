@@ -78,3 +78,11 @@ Your own work?
 See libopencm3-examples (https://github.com/libopencm3/libopencm3-examples/)
 to see how to get things going. You'll probably need to adapt GPIO pins
 (at least) for your target platform.
+
+
+If you happen to have an el-cheapo STM32F103 from China, too, these
+documentation links might come handy:
+* stm32f103 datasheet: http://www.st.com/content/ccc/resource/technical/document/datasheet/33/d4/6f/1d/df/0b/4c/6d/CD00161566.pdf/files/CD00161566.pdf/jcr:content/translations/en.CD00161566.pdf
+* stm32f1xx manual: http://www.st.com/content/ccc/resource/technical/document/reference_manual/59/b9/ba/7f/11/af/43/d5/CD00171190.pdf/files/CD00171190.pdf/jcr:content/translations/en.CD00171190.pdf
+* STM32 Cortex-M3 programming manual: http://www.st.com/st-web-ui/static/active/en/resource/technical/document/programming_manual/CD00228163.pdf
+* http://www.mikrocontroller.net/articles/STM32 (german, KB article)
