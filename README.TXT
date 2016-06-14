@@ -71,3 +71,10 @@ usb_dfu:
     is available)
   - a Makefile target for projects exists: use the suffix .dfu-flash
     to run dfu-util for flashing
+
+Your own work?
+--------------
+
+See libopencm3-examples (https://github.com/libopencm3/libopencm3-examples/)
+to see how to get things going. You'll probably need to adapt GPIO pins
+(at least) for your target platform.
