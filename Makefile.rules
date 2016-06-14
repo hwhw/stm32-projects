@@ -38,6 +38,7 @@ AS		:= $(PREFIX)-as
 OBJCOPY		:= $(PREFIX)-objcopy
 OBJDUMP		:= $(PREFIX)-objdump
 GDB		:= $(PREFIX)-gdb
+DFU_UTIL	= $(shell which dfu-util)
 STFLASH		= $(shell which st-flash)
 STYLECHECK	:= /checkpatch.pl
 STYLECHECKFLAGS	:= --no-tree -f --terse --mailback
@@ -197,6 +198,10 @@ styleclean: $(STYLECHECKFILES:=.styleclean)
 %.stlink-flash: %.bin
 	@printf "  FLASH  $<\n"
 	$(Q)$(STFLASH) write $(*).bin 0x8000000
+
+%.dfu-flash: %.bin
+	@printf "  FLASH  $<\n"
+	$(Q)$(DFU_UTIL) -a 0 -d 0483:df11 -s 0x08002000:leave -D $(*).bin
 
 ifeq ($(STLINK_PORT),)
 ifeq ($(BMP_PORT),)
