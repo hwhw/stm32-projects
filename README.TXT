@@ -11,6 +11,7 @@ For now I settled on using libopencm3 for interfacing with the core
 for when I'm too lazy to write such stuff myself. In case of the USB
 code, for example, I hope you can relate.
 
+
 First steps:
 ------------
 
@@ -22,6 +23,8 @@ First steps:
   * openocd (if you have an st-link programmer - as an alternative -
     or some other more obscure tool)
   * stm32flash (when you're going to flash via UART)
+  * or visit a friend who will flash a USB bootloader for you
+    (see below/in usb_dfu)
 
 * initialize libopencm3 submodule:
 
@@ -30,17 +33,31 @@ First steps:
 
 * build libopencm3
 
+* optional: set up default linker script (defaults to USB bootloader
+  linker configuration for now, so you need to change it when you
+  are using a flash tool and don't have a bootloader):
+
+# cp stm32-full.ld stm32-default.ld
+
 # cd libopencm3 && make
 
 * build projects you're interested in
 
 # cd ws2812 && make
+(or some other project folder)
 
 Flashing:
 ---------
 
 The Makefile is prepared with a few targets that will trigger flashing
 using the various possible ways. Look into Makefile.rules for details.
+
+When using the USB bootloader, just run
+
+# make blinky.dfu-flash
+
+(this will build blinky.bin and runs dfu-flash with config for the
+USB bootloader)
 
 When you're going to use stm32flash (and it's easy and nice!), do it
 like this:
@@ -51,6 +68,7 @@ like this:
 * run stm32flash:
 
 # stm32flash -w mybinary.bin /dev/ttyUSB0
+
 
 List of projects:
 -----------------
@@ -71,6 +89,11 @@ usb_dfu:
     is available)
   - a Makefile target for projects exists: use the suffix .dfu-flash
     to run dfu-util for flashing
+
+blinky:
+
+  Just blink the onboard LED. Start with this!
+
 
 Your own work?
 --------------
