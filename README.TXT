@@ -63,3 +63,11 @@ ws2812:
   <16bit MSB LED number> <8bit green> <8bit red> <8bit blue>
   A tool that does this with a CLI interface is also present in a subfolder.
 
+usb_dfu:
+
+  USB Bootloader (99% copied from libopencm3-examples)
+  Adapted for STM32F103 China development board:
+  - bootloader is triggered by setting BOOT1 to 1 (since no other button
+    is available)
+  - a Makefile target for projects exists: use the suffix .dfu-flash
+    to run dfu-util for flashing
