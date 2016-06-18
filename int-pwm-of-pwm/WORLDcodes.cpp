@@ -8501,9 +8501,9 @@ const struct IrCode code_eu139Code PROGMEM = {
 
 ////////////////////////////////////////////////////////////////
 const uint16_t code_epsonTimes[] = {
-  0, 1100,    // 0
-  550, 550,   // 1
-  8800, 4400, // preamble
+  0, 110,    // 0
+  55, 55,   // 1
+  880, 440, // preamble
 };
 const uint8_t code_epsonCodes[] = {
   0b10010001,
