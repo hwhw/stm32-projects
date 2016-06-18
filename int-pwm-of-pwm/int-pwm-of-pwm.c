@@ -31,10 +31,6 @@ static void nvic_setup(void)
 static void pwm_setup(void) {
 	nvic_setup();
 
-	/* output will be on pin GPIO_TIM4_CH1 = PB6 */
-	gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_50_MHZ,
-	    GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO_TIM4_CH1 );
-
 	timer_reset(TIM3);
 
 	/* set up TIM3 for PWM of the signal */
@@ -69,17 +65,25 @@ static void carrier_setup(uint16_t carrier_phase) {
 }
 
 #if 0
-static void out_high(void) {
+static void timer_high(void) {
 	TIM_CCER(TIM4) |= TIM_CCER_CC1E; /* enable OC1 output for TIM4 (carrier) */
 }
 #endif
 
-static void out_low(void) {
+static void timer_low(void) {
 	TIM_CCER(TIM4) &= ~TIM_CCER_CC1E; /* disable OC1 output for TIM4 (carrier) */
 }
 
-static void out_toggle(void) {
+static void timer_toggle(void) {
 	TIM_CCER(TIM4) ^= TIM_CCER_CC1E; /* toggle OC1 output for TIM4 (carrier) */
+}
+
+static void direct_low(void) {
+	gpio_clear(GPIOB, GPIO6);
+}
+
+static void direct_toggle(void) {
+	gpio_toggle(GPIOB, GPIO6);
 }
 
 struct IrCode {
@@ -99,28 +103,70 @@ struct IrCode {
 #define C_STOP -1
 #define C_END -2
 
-static int16_t get_timing(void) {
+/* 205ms spacing between codes */
+#define SPACE 20500
+
+static volatile bool running = false;
+void tim3_isr(void)
+{
 	const struct IrCode **end_code = ir_codes + (sizeof(ir_codes) / sizeof(*ir_codes));
 	static uint16_t cur_pair = 0;
 	static uint8_t cur_pair_elem = 0; // 0 or 1
 	static struct IrCode **cur_code = (struct IrCode **)ir_codes;
+	static void (*handle_toggle)(void) = &timer_toggle;
+	static void (*handle_low)(void) = &timer_low;
 
+isr_restart:
 	if(cur_code == (struct IrCode **)end_code) {
+		// we've finished the list of all codes.
+		// reset state and stop.
 		cur_code = (struct IrCode **)ir_codes;
 		cur_pair = 0;
-		return C_END;
+		(*handle_low)();
+		timer_disable_counter(TIM3);
+		running = false;
+		goto isr_done;
 	}
 
 	if(cur_pair >= (*cur_code)->numpairs) {
+		// we've sent all the on/off pairs for the
+		// current code. prepare to handle the next
+		// one:
 		cur_code++;
 		cur_pair = 0;
-		return C_STOP;
+		// but don't start right away, rather, pause
+		// for a given amount of inter-code spacing time
+		timer_set_period(TIM3, SPACE);
+		goto isr_done;
 	}
 
 	if((cur_pair == 0) && (cur_pair_elem == 0)) {
-		carrier_setup((*cur_code)->timer_val);
+		// we're at the start of a new code. set up
+		(*handle_low)();
+		// the carrier - if any.
+		if((*cur_code)->timer_val == 0) {
+			timer_disable_counter(TIM4);
+			/* output will be on pin GPIO_TIM4_CH1 = PB6 */
+			gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_50_MHZ,
+			    GPIO_CNF_OUTPUT_PUSHPULL, GPIO6 );
+			// no carrier, just on/off coding
+			handle_toggle = &direct_toggle;
+			handle_low = &direct_low;
+		} else {
+			/* output will be on pin GPIO_TIM4_CH1 = PB6 */
+			gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_50_MHZ,
+			    GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO_TIM4_CH1 );
+			// set up TIM4 for carrier generation
+			carrier_setup((*cur_code)->timer_val);
+			handle_toggle = &timer_toggle;
+			handle_low = &timer_low;
+		}
 	}
 
+	// each on/off pair is identified by <bitcompression> bits of
+	// data in the "codes" array. most significant bit(s) in a byte
+	// is/are used first.
+	// overall, numpairs of on/off pairs are encoded.
 	uint8_t byte = (cur_pair * (*cur_code)->bitcompression) >> 3;
 	uint8_t bit = (cur_pair * (*cur_code)->bitcompression) % 8;
 
@@ -128,38 +174,25 @@ static int16_t get_timing(void) {
 	t_idx = t_idx >> (8-(bit + (*cur_code)->bitcompression));
 	t_idx = t_idx & (0xFF >> (8-(*cur_code)->bitcompression));
 
-	int16_t timing = (*cur_code)->times[(t_idx<<1) + cur_pair_elem];
+	// t_idx now contains the dictionary id of the pair to be sent
+	// now look up the pair timings in the dictionary.
+
+	int16_t	timing = (*cur_code)->times[(t_idx<<1) + cur_pair_elem];
+
+	// two values for each pair, one "on" timing, one "off" timing
 	cur_pair_elem ^= 1;
 	if(cur_pair_elem == 0) {
 		cur_pair++;
 	}
 
-	return timing;
-}
+	// toggle carrier/signal output */
+	(*handle_toggle)();
 
-/* 205ms spacing between codes */
-#define SPACE 20500
+	if(timing == 0)
+		goto isr_restart;
+	timer_set_period(TIM3, timing);
 
-static volatile bool running = false;
-void tim3_isr(void)
-{
-	/*
-		at this point, the last value written to the period length got latched.
-		prepare and write the next one to the preload register
-	*/
-	int16_t next = get_timing();
-	if(next == C_STOP) {
-		next = SPACE;
-	} else if(next == C_END) {
-		out_low();
-		timer_disable_counter(TIM3);
-		running = false;
-		return;
-	} else {
-		out_toggle();
-	}
-	timer_set_period(TIM3, next);
-
+isr_done:
 	TIM_SR(TIM3) &= ~TIM_SR_UIF; /* Clear interrrupt flag. */
 }
 
@@ -170,7 +203,7 @@ int main(void)
 
 	while (1) {
 		running = true;
-		timer_set_period(TIM3, 0); // short one
+		timer_set_period(TIM3, 1); // short one
 		timer_enable_counter(TIM3);
 
 		/* wait until done */
