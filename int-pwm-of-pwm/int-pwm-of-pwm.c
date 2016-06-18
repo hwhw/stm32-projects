@@ -9,8 +9,9 @@ static void clock_setup(void)
 {
 	rcc_clock_setup_in_hse_8mhz_out_72mhz();
 
-	/* Enable clocks for GPIO port B */
+	/* Enable clocks for GPIO port B, C */
 	rcc_periph_clock_enable(RCC_GPIOB);
+	rcc_periph_clock_enable(RCC_GPIOC);
 
 	/* Enable TIM3+4 Periph */
 	rcc_periph_clock_enable(RCC_TIM3);
@@ -199,6 +200,9 @@ isr_done:
 int main(void)
 {
 	clock_setup();
+	gpio_set_mode(GPIOC, GPIO_MODE_OUTPUT_2_MHZ,
+		      GPIO_CNF_OUTPUT_PUSHPULL, GPIO13);
+	gpio_clear(GPIOC, GPIO13);
 	pwm_setup();
 
 	while (1) {
@@ -208,6 +212,7 @@ int main(void)
 
 		/* wait until done */
 		while(running) { __asm__("wfi"); }
+		gpio_toggle(GPIOC, GPIO13);
 	}
 
 	return 0;
