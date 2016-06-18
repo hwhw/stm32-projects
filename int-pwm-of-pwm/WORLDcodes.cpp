@@ -8500,9 +8500,42 @@ const struct IrCode code_eu139Code PROGMEM = {
 
 
 ////////////////////////////////////////////////////////////////
+const uint16_t code_epsonTimes[] = {
+  0, 1100,    // 0
+  550, 550,   // 1
+  8800, 4400, // preamble
+};
+const uint8_t code_epsonCodes[] = {
+  0b10010001,
+  0b00010101,
+  0b01010100,
+  0b01000101,
+  0b00010100,
+  0b01010001,
+  0b01010101,
+  0b01000101,
+  0b01000100,
+  0b01000100,
+  0b01000101,
+  0b00010001,
+  0b01000000,
+};
+const struct IrCode code_epson = {
+  freq_to_timerval(40000),
+  49,
+  2,
+  code_epsonTimes,
+  code_epsonCodes
+};
+
+////////////////////////////////////////////////////////////////
 
 
 const struct IrCode *ir_codes[] PROGMEM = {
+  &code_epson,
+};
+
+const struct IrCode *_ir_codes[] PROGMEM = {
   &code_na000Code,
   &code_na001Code,
   &code_na002Code,
