@@ -73,14 +73,6 @@ like this:
 List of projects:
 -----------------
 
-ws2812:
-
-  this implements a controller for WS2812(b) LEDs using PWM capabilities.
-  It presents itself to the host PC as a USB CDC (serial) device.
-  You can send data to that USB device to set LED colors:
-  <16bit MSB LED number> <8bit green> <8bit red> <8bit blue>
-  A tool that does this with a CLI interface is also present in a subfolder.
-
 usb_dfu:
 
   USB Bootloader (99% copied from libopencm3-examples)
@@ -93,6 +85,26 @@ usb_dfu:
 blinky:
 
   Just blink the onboard LED. Start with this!
+
+ws2812:
+
+  this implements a controller for WS2812(b) LEDs using PWM capabilities.
+  It presents itself to the host PC as a USB CDC (serial) device.
+  You can send data to that USB device to set LED colors:
+  <16bit MSB LED number> <16bit red> <16bit green> <16bit blue>
+  (only topmost 8bit of color values are used)
+  Also accepts the same command syntax on UART3 (RX only), 921600 baud, 8N1.
+  A tool that does this with a CLI interface is also present in a subfolder.
+
+moodlight:
+
+  generate 16bit PWM outputs for up to 4 RGB LEDs (12 channels).
+  same protocol as for ws2812 above.
+  See the README in the project folder for details.
+
+tvbgone:
+
+  An implementation of the TV-B-Gone software for the STM32.
 
 
 Your own work?
