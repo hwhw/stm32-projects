@@ -1,4 +1,4 @@
-BINARY = int-pwm-of-pwm
+BINARY = tvbgone
 
 LDSCRIPT = ../stm32-default.ld
 
