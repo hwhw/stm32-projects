@@ -24,11 +24,17 @@
 #include <libopencm3/stm32/dma.h>
 #include <libopencm3/cm3/nvic.h>
 #include <libopencm3/stm32/timer.h>
+#include <libopencm3/stm32/usart.h>
 #include <libopencm3/usb/usbd.h>
 #include <libopencm3/usb/cdc.h>
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
+
+// maximum is at about 4000
+#define LED_COUNT 0x200
+// minimum ID offset is 0x100 (first ID byte mustn't be 0x00)
+#define ID_OFFSET 0xA000
 
 int _write(int file, char *ptr, int len);
 
@@ -36,8 +42,10 @@ static void clock_setup(void)
 {
 	rcc_clock_setup_in_hse_8mhz_out_72mhz();
 
-	/* Enable clocks for GPIO port A (for GPIO_USART2_TX) */
+	/* Enable clocks for GPIO ports */
 	rcc_periph_clock_enable(RCC_GPIOA);
+	rcc_periph_clock_enable(RCC_GPIOB);
+	rcc_periph_clock_enable(RCC_GPIOC);
 	rcc_periph_clock_enable(RCC_AFIO);
 
 	/* Enable TIM3 Periph */
@@ -45,9 +53,35 @@ static void clock_setup(void)
 
 	/* Enable DMA1 clock */
 	rcc_periph_clock_enable(RCC_DMA1);
+
+	rcc_periph_clock_enable(RCC_USART3);
 }
 
-#define LED_COUNT 4000
+static void uart_setup(void)
+{
+	/* Enable the USART3 interrupt. */
+	nvic_enable_irq(NVIC_USART3_IRQ);
+
+	/* setup GPIO: tx on PB10, rx on PB11 */
+	//gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_50_MHZ,
+	//	GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO_USART3_TX);
+	gpio_set_mode(GPIOB, GPIO_MODE_INPUT,
+		GPIO_CNF_INPUT_FLOAT, GPIO_USART3_RX);
+
+        /* Setup UART parameters. */
+	usart_set_baudrate(USART3, 921600);
+	usart_set_databits(USART3, 8);
+	usart_set_stopbits(USART3, USART_STOPBITS_1);
+	usart_set_parity(USART3, USART_PARITY_NONE);
+	usart_set_flow_control(USART3, USART_FLOWCONTROL_NONE);
+	usart_set_mode(USART3, USART_MODE_RX); // no tx for now
+
+	/* Enable USART3 Receive interrupt. */
+	USART_CR1(USART3) |= USART_CR1_RXNEIE;
+
+	/* Finally enable the USART. */
+	usart_enable(USART3);
+}
 
 #define TICK_NS (1000/72)
 #define WS0 (350 / TICK_NS)
@@ -105,6 +139,71 @@ static void populate_dma_data(uint8_t *dma_data_bank) {
 		led_cur++;
 	}
 }
+
+static void handle_cmd(uint8_t cmd) {
+	static enum {
+		STATE_WAITING,
+		STATE_GOT_ID1,
+		STATE_GOT_ID2,
+		STATE_GOT_COL1,
+		STATE_GOT_COL2,
+		STATE_GOT_COL3,
+		STATE_GOT_COL4,
+		STATE_GOT_COL5,
+	} cmd_state = STATE_WAITING;
+	static uint16_t id = 0;
+	static uint16_t col_r = 0;
+	static uint16_t col_g = 0;
+	static uint16_t col_b = 0;
+
+	gpio_toggle(GPIOC, GPIO13);	/* LED on/off */
+
+	switch(cmd_state) {
+	case STATE_WAITING:
+		id = cmd;
+		/* send a bunch of 0x00 to re-sync protocol */
+		if(id != 0x00)
+			cmd_state = STATE_GOT_ID1;
+		break;
+	case STATE_GOT_ID1:
+		id = (id << 8) + cmd;
+		cmd_state = STATE_GOT_ID2;
+		break;
+	case STATE_GOT_ID2:
+		col_r = cmd;
+		cmd_state = STATE_GOT_COL1;
+		break;
+	case STATE_GOT_COL1:
+		cmd_state = STATE_GOT_COL2;
+		break;
+	case STATE_GOT_COL2:
+		col_g = cmd;
+		cmd_state = STATE_GOT_COL3;
+		break;
+	case STATE_GOT_COL3:
+		cmd_state = STATE_GOT_COL4;
+		break;
+	case STATE_GOT_COL4:
+		col_b = cmd;
+		cmd_state = STATE_GOT_COL5;
+		break;
+	case STATE_GOT_COL5:
+		id -= ID_OFFSET;
+		if(id < LED_COUNT)
+			led_data[id] = (col_g << 16) | (col_r << 8) | (col_b);
+		cmd_state = STATE_WAITING;
+		break;
+	}
+}
+
+void usart3_isr(void)
+{
+        /* Check if we were called because of RXNE. */
+        if ((USART_SR(USART3) & USART_SR_RXNE) != 0) {
+                handle_cmd(usart_recv(USART3));
+        }
+}
+
 
 static void dma_int_enable(void) {
 	/* SPI1 TX on DMA1 Channel 3 */
@@ -338,49 +437,13 @@ static int cdcacm_control_request(usbd_device *usbd_dev, struct usb_setup_data *
 
 static void cdcacm_data_rx_cb(usbd_device *usbd_dev, uint8_t ep)
 {
-	static enum {
-		STATE_WAITING,
-		STATE_GOT_ID1,
-		STATE_GOT_ID2,
-		STATE_GOT_COL1,
-		STATE_GOT_COL2,
-	} cmd_state = STATE_WAITING;
-	static uint16_t id = 0;
-	static uint32_t col = 0;
-
 	(void)ep;
 
 	uint8_t buf[64];
 	int len = usbd_ep_read_packet(usbd_dev, 0x01, buf, 64);
 
 	for(int i=0; i<len; i++) {
-		gpio_toggle(GPIOC, GPIO13);	/* LED on/off */
-		switch(cmd_state) {
-		case STATE_WAITING:
-			id = buf[i];
-			/* send a bunch of 0xFF to re-sync protocol */
-			if(id != 0xFF)
-				cmd_state = STATE_GOT_ID1;
-			break;
-		case STATE_GOT_ID1:
-			id = (id << 8) + buf[i];
-			cmd_state = STATE_GOT_ID2;
-			break;
-		case STATE_GOT_ID2:
-			col = buf[i];
-			cmd_state = STATE_GOT_COL1;
-			break;
-		case STATE_GOT_COL1:
-			col = (col << 8) + buf[i];
-			cmd_state = STATE_GOT_COL2;
-			break;
-		case STATE_GOT_COL2:
-			col = (col << 8) + buf[i];
-			if(id < LED_COUNT)
-				led_data[id] = col;
-			cmd_state = STATE_WAITING;
-			break;
-		}
+		handle_cmd(buf[i]);
 	}
 }
 
@@ -405,6 +468,12 @@ int main(void)
 
 	clock_setup();
 
+	// LED
+	gpio_set_mode(GPIOC, GPIO_MODE_OUTPUT_2_MHZ,
+		      GPIO_CNF_OUTPUT_PUSHPULL, GPIO13);
+
+	uart_setup();
+
 	memset(dma_data, 0, DMA_SIZE);
 	memset((void*)led_data, 0, LED_COUNT*sizeof(*led_data));
 	//populate_dma_data(dma_data);
@@ -417,7 +486,7 @@ int main(void)
 	pwm_setup();
 
 	while (1) {
-	//	__asm__("wfe");
+		__asm__("wfe");
 		usbd_poll(usbd_dev);
 	}
 }
