@@ -166,6 +166,8 @@ void lbus_init(void) {
 	nvic_enable_irq(NVIC_TIM1_UP_IRQ);
 	TIM_PSC(TIM1) = ((CPU_SPEED/2)/10000); // 1 tick = 100 usec
 	TIM_ARR(TIM1) = LBUS_TIMEOUT;
+	TIM_EGR(TIM1) |= TIM_EGR_UG;
+	TIM_DIER(TIM1) |= TIM_DIER_UIE;
 
 	/* mis-use end-of-packet function to enforce state reset */
 	lbus_end_pkg();
