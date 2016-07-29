@@ -2,7 +2,9 @@
 #define _LBUS_DATA_H_
 #include <stdint.h>
 
+#ifndef __packed
 #define __packed __attribute__ ((packed))
+#endif
 
 #define PAGE_SIZE 1024
 
