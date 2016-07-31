@@ -42,13 +42,16 @@ static int tx(void* buf, int size) {
 	int done = 0;
 	int transferred = 0;
 	uint8_t tbuf[64];
-	while(done < size) {
+	while(size > 0) {
 		const int chunk_size = size > 63 ? 63 : size;
 		tbuf[0] = 1; // XMIT
 		memcpy(tbuf+1, buf+done, chunk_size);
 		int res = libusb_bulk_transfer(dev, 0x01, tbuf, chunk_size+1, &transferred, LIBUSB_TXTIMEOUT);
 		if(res == 0 || res == LIBUSB_ERROR_TIMEOUT) {
-			done += transferred;
+			if(transferred > 0) {
+				done += transferred-1;
+				size -= transferred-1;
+			}
 		} else {
 			error("error during communication (transmit)\n");
 		}
@@ -167,8 +170,12 @@ int main(int argc, char* argv[]) {
 	if(dst < 0 || dst > 0xFF) usage();
 	char *cmd = argv[optind++];
 	if(!strcasecmp("ping", cmd)) {
-		uint8_t pkg[] = { 5, 0, dst, PING };
-		tx(pkg, sizeof(pkg));
+		struct lbus_hdr pkg = {
+			.length = sizeof(struct lbus_hdr)+1,
+			.addr = dst,
+			.cmd = PING
+		};
+		tx(&pkg, sizeof(pkg));
 		uint8_t reply;
 		if(rx(&reply, 1) == 1) {
 			fprintf(stderr, "got reply\n");
@@ -177,44 +184,140 @@ int main(int argc, char* argv[]) {
 			fprintf(stderr, "miss\n");
 		}
 	} else if(!strcasecmp("reset_to_bootloader", cmd)) {
-		uint8_t pkg[] = { 4, 0, dst, RESET_TO_BOOTLOADER };
-		tx(pkg, sizeof(pkg));
+		struct lbus_hdr pkg = {
+			.length = sizeof(struct lbus_hdr),
+			.addr = dst,
+			.cmd = RESET_TO_BOOTLOADER
+		};
+		tx(&pkg, sizeof(pkg));
 		goto success;
 	} else if(!strcasecmp("reset_to_firmware", cmd)) {
-		uint8_t pkg[] = { 4, 0, dst, RESET_TO_FIRMWARE };
-		tx(pkg, sizeof(pkg));
+		struct lbus_hdr pkg = {
+			.length = sizeof(struct lbus_hdr),
+			.addr = dst,
+			.cmd = RESET_TO_FIRMWARE
+		};
+		tx(&pkg, sizeof(pkg));
 		goto success;
 	} else if(!strcasecmp("erase_config", cmd)) {
-		uint8_t pkg[] = { 4, 0, dst, ERASE_CONFIG };
-		tx(pkg, sizeof(pkg));
+		struct lbus_hdr pkg = {
+			.length = sizeof(struct lbus_hdr),
+			.addr = dst,
+			.cmd = ERASE_CONFIG
+		};
+		tx(&pkg, sizeof(pkg));
 		goto success;
 	} else if(!strcasecmp("get_data", cmd)) {
-		if(optind + 1 >= argc) {
-			fprintf(stderr, "usage: ... %s <type_id> <reply_size>\n", cmd);
-			goto done;
-		}
-		int item = strtol(argv[optind++], NULL, 0);
-		if(item < 1 || item > 0xFFFF) {
-			fprintf(stderr, "bad type_id.\n");
-			goto done;
-		}
-		int reply_size = strtol(argv[optind++], NULL, 0);
-		if(reply_size < 0 || reply_size > sizeof(buf)) {
-			fprintf(stderr, "bad reply_size.\n");
-			goto done;
-		}
-		uint16_t d16 = 6 + reply_size;
-		tx(&d16, 2);
-		uint8_t d8[] = { dst, GET_DATA };
-		tx(d8, 2);
-		d16 = item;
-		tx(&d16, 2);
-		if(rx(&buf, reply_size) == reply_size) {
-			fprintf(stderr, "got answer:\n");
-			write(1, buf, reply_size);
-			goto success;
+		if(optind == argc-1) {
+			struct lbus_pkg pkg = {
+				.hdr = {
+					.length = sizeof(struct lbus_hdr)+sizeof(struct lbus_GET_DATA),
+					.addr = dst,
+					.cmd = GET_DATA,
+				},
+				.GET_DATA = {
+					.type = 0
+				}
+			};
+			if(!strcasecmp("status", argv[optind])) {
+				pkg.GET_DATA.type = LBUS_DATA_STATUS;
+				uint8_t r;
+				pkg.hdr.length += sizeof(r);
+				tx(&pkg, sizeof(struct lbus_hdr)+sizeof(struct lbus_GET_DATA));
+				if(rx(&r, sizeof(r)) == sizeof(r)) {
+					printf("%d\n", r);
+				} else {
+					fprintf(stderr, "error or no reply\n");
+				}
+			} else
+			if(!strcasecmp("address", argv[optind])) {
+				pkg.GET_DATA.type = LBUS_DATA_ADDRESS;
+				uint8_t r;
+				pkg.hdr.length += sizeof(r);
+				tx(&pkg, sizeof(struct lbus_hdr)+sizeof(struct lbus_GET_DATA));
+				if(rx(&r, sizeof(r)) == sizeof(r)) {
+					printf("0x%X\n", r);
+				} else {
+					fprintf(stderr, "error or no reply\n");
+				}
+			} else
+			if(!strcasecmp("firmware_version", argv[optind])) {
+				pkg.GET_DATA.type = LBUS_DATA_FIRMWARE_VERSION;
+				uint32_t r;
+				pkg.hdr.length += sizeof(r);
+				tx(&pkg, sizeof(struct lbus_hdr)+sizeof(struct lbus_GET_DATA));
+				if(rx(&r, sizeof(r)) == sizeof(r)) {
+					printf("%x\n", r);
+				} else {
+					fprintf(stderr, "error or no reply\n");
+				}
+			} else
+			if(!strcasecmp("bootloader_version", argv[optind])) {
+				pkg.GET_DATA.type = LBUS_DATA_BOOTLOADER_VERSION;
+				uint32_t r;
+				pkg.hdr.length += sizeof(r);
+				tx(&pkg, sizeof(struct lbus_hdr)+sizeof(struct lbus_GET_DATA));
+				if(rx(&r, sizeof(r)) == sizeof(r)) {
+					printf("%x\n", r);
+				} else {
+					fprintf(stderr, "error or no reply\n");
+				}
+			} else
+			if(!strcasecmp("firmware_name", argv[optind])) {
+				pkg.GET_DATA.type = LBUS_DATA_FIRMWARE_NAME_LENGTH;
+				uint8_t r;
+				pkg.hdr.length += sizeof(r);
+				tx(&pkg, sizeof(struct lbus_hdr)+sizeof(struct lbus_GET_DATA));
+				if(rx(&r, sizeof(r)) == sizeof(r)) {
+					uint8_t nbuf[256];
+					pkg.GET_DATA.type = LBUS_DATA_FIRMWARE_NAME;
+					pkg.hdr.length = sizeof(struct lbus_hdr)+sizeof(struct lbus_GET_DATA)+r;
+					tx(&pkg, sizeof(struct lbus_hdr)+sizeof(struct lbus_GET_DATA));
+					if(rx(&nbuf, r) == r) {
+						nbuf[r] = '\0';
+						printf("%s\n", nbuf);
+					} else {
+						fprintf(stderr, "error getting name\n");
+					}
+				} else {
+					fprintf(stderr, "error or no reply\n");
+				}
+			} else
+			{
+				fprintf(stderr, "unknown data item.\n");
+			}
+		} else if(optind == argc) {
+			int item = strtol(argv[optind++], NULL, 0);
+			if(item < 1 || item > 0xFFFF) {
+				fprintf(stderr, "bad type_id.\n");
+				goto done;
+			}
+			int reply_size = strtol(argv[optind++], NULL, 0);
+			if(reply_size < 0 || reply_size > sizeof(buf)) {
+				fprintf(stderr, "bad reply_size.\n");
+				goto done;
+			}
+			struct lbus_pkg pkg = {
+				.hdr = {
+					.length = sizeof(struct lbus_hdr)+sizeof(struct lbus_GET_DATA)+reply_size,
+					.addr = dst,
+					.cmd = GET_DATA,
+				},
+				.GET_DATA = {
+					.type = item
+				}
+			};
+			tx(&pkg, sizeof(struct lbus_hdr)+sizeof(struct lbus_GET_DATA));
+			if(rx(&buf, reply_size) == reply_size) {
+				fprintf(stderr, "got answer:\n");
+				write(1, buf, reply_size);
+				goto success;
+			} else {
+				fprintf(stderr, "error or no reply\n");
+			}
 		} else {
-			fprintf(stderr, "error or no reply\n");
+			fprintf(stderr, "usage: ... %s <type_id> <reply_size>\nor     ... %s <type_string>\n", cmd, cmd);
+			goto done;
 		}
 	} else if(!strcasecmp("set_address", cmd)) {
 		if(optind >= argc) {
@@ -226,8 +329,17 @@ int main(int argc, char* argv[]) {
 			fprintf(stderr, "bad address given.\n");
 			goto done;
 		}
-		uint8_t pkg[] = { 6, 0, dst, SET_ADDRESS, address };
-		tx(pkg, sizeof(pkg));
+		struct lbus_pkg pkg = {
+			.hdr = {
+				.length = sizeof(struct lbus_hdr)+sizeof(struct lbus_SET_ADDRESS)+1,
+				.addr = dst,
+				.cmd = SET_ADDRESS,
+			},
+			.SET_ADDRESS = {
+				.naddr = address
+			}
+		};
+		tx(&pkg, sizeof(struct lbus_hdr)+sizeof(struct lbus_SET_ADDRESS));
 		uint8_t reply;
 		if(rx(&reply, 1) == 1 && reply == 0) {
 			fprintf(stderr, "success\n");
@@ -246,13 +358,20 @@ int main(int argc, char* argv[]) {
 			fprintf(stderr, "bad reply_size.\n");
 			goto done;
 		}
-		uint16_t d16 = 8 + length + 4;
-		tx(&d16, 2);
-		uint8_t d8[] = { dst, READ_MEMORY };
-		tx(d8, 2);
-		tx(&address, 4);
-		uint32_t crc_test = 0;
+		struct lbus_pkg pkg = {
+			.hdr = {
+				.length = sizeof(struct lbus_hdr)+sizeof(struct lbus_READ_MEMORY)+length+4,
+				.addr = dst,
+				.cmd = READ_MEMORY,
+			},
+			.READ_MEMORY = {
+				.address = address,
+			}
+		};
+		tx(&pkg, sizeof(struct lbus_hdr)+sizeof(struct lbus_READ_MEMORY));
+		uint32_t crc_test;
 		if(rx(buf, length) == length && rx(&crc_test, 4) == 4) {
+			//uint32_t crc_test = *(uint32_t*)(&buf[length-4]);
 			fprintf(stderr, "got answer (crc is %08X - ", crc_test);
 			if(crc_test == crc32(0xFFFFFFFF, length, buf)) {
 				fprintf(stderr, "OK)\n");
@@ -298,18 +417,32 @@ int main(int argc, char* argv[]) {
 		void *p = fwbuf;
 		uint16_t pg = FW_START_PAGE;
 		for(void *p = fwbuf; p < (fwbuf+fw_pg_size); p+=PAGE_SIZE) {
-			uint16_t d16 = 6 + PAGE_SIZE + 4 + 1;
-			tx(&d16, 2);
-			uint8_t d8[] = { dst, FLASH_FIRMWARE };
-			tx(d8, 2);
-			tx(&pg, 2);
+			struct {
+			       struct lbus_hdr hdr;
+			       uint16_t page;
+			} __attribute__((packed)) pkg = {
+				.hdr = {
+					.length = sizeof(struct lbus_hdr) + sizeof(uint16_t) + PAGE_SIZE + sizeof(uint32_t) + 1,
+					.addr = dst,
+					.cmd = FLASH_FIRMWARE
+				},
+				.page = pg
+			};
+			tx(&pkg, sizeof(pkg));
 			tx(p, PAGE_SIZE);
 			uint32_t crc = crc32(0xFFFFFFFF, PAGE_SIZE, p);
 			tx(&crc, 4);
-			uint8_t reply;
-			if(rx(&reply, 1) == 1 && reply == 0) {
-				fprintf(stderr, "<%02X>", pg);
-			} else {
+			uint8_t reply=1;
+			for(int i=0; i<10; i++) {
+				if(rx(&reply, 1) == 1 && reply == 0) {
+					fprintf(stderr, "<%02X>", pg);
+					break;
+				} else {
+					fprintf(stderr, ".");
+					usleep(100000);
+				}
+			}
+			if(reply != 0) {
 				close(ffd);
 				fprintf(stderr, " failure!\n");
 				goto done;
