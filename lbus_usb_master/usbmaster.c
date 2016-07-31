@@ -82,6 +82,10 @@ static const char *usb_strings[] = {
 	"1.0",
 };
 
+#define RECV_SIZE 2048
+uint8_t recv_buf[RECV_SIZE];
+volatile int recv_head=0;
+volatile int recv_tail=0;
 
 #define CMD_XMIT 1
 #define CMD_RECV 2
@@ -95,28 +99,34 @@ static void usbmaster_receive_cb(usbd_device *usbd_dev, uint8_t ep) {
 
 	len = usbd_ep_read_packet(usbd_dev, 0x01, buf, 64);
 	if(len < 1) return;
-	uint8_t cmd = buf[0];
+	const uint8_t cmd = buf[0];
 
 	if(cmd == CMD_XMIT) {
+		//USART_CR1(LBUS_USART) &= ~USART_CR1_RE;
 		gpio_set(LBUS_RE_GPIO, LBUS_RE_PIN);
 		gpio_set(LBUS_DE_GPIO, LBUS_DE_PIN);
-		USART_CR1(LBUS_USART) &= ~USART_CR1_RE;
 		for(int i=1; i<len; i++) {
 			usart_send_blocking(LBUS_USART, buf[i]);
 		}
-	} else if(cmd == CMD_RECV) {
-		const uint8_t size = buf[1];
+		while((USART_SR(LBUS_USART) & USART_SR_TC) == 0) __asm("nop");
+		recv_tail = recv_head; // drop current RX queue contents
 		gpio_clear(LBUS_DE_GPIO, LBUS_DE_PIN);
 		gpio_clear(LBUS_RE_GPIO, LBUS_RE_PIN);
-		USART_CR1(LBUS_USART) |= USART_CR1_RE;
-		TIM_EGR(TIM1) |= TIM_EGR_UG;
+		//USART_CR1(LBUS_USART) |= USART_CR1_RE;
+	} else if(cmd == CMD_RECV) {
+		if(len < 2) return;
+		const uint8_t size = buf[1];
+		TIM1_CNT = 0;
 		TIM_CR1(TIM1) |= TIM_CR1_CEN;
-		int i=0;
+		int i = 0;
 		while(i<size) {
-			if((USART_SR(LBUS_USART) & USART_SR_RXNE) != 0) {
-				buf[i++] = usart_recv(LBUS_USART);
+			if(recv_head != recv_tail) {
+				buf[i++] = recv_buf[recv_tail++];
+				recv_tail = recv_tail % RECV_SIZE;
 			}
-			if(TIM1_CNT > LBUS_TIMEOUT) break;
+			if(TIM1_CNT > 3+LBUS_TIMEOUT) {
+				break;
+			}
 		}
 		usbd_ep_write_packet(usbd_dev, 0x82, buf, i);
 		TIM_CR1(TIM1) &= ~TIM_CR1_CEN;
@@ -136,6 +146,20 @@ static usbd_device *usbd_dev;
 
 void usb_lp_can_rx0_isr(void) {
 	usbd_poll(usbd_dev);
+}
+
+/* USART interrupt service routine
+ *
+ * This ISR handles received bytes on the USART
+ */
+void LBUS_USART_ISR(void) {
+	/* Check if we were called because of RXNE. */
+	if((USART_SR(LBUS_USART) & USART_SR_RXNE) != 0) {
+		/* reset timeout timer */
+		TIM1_CNT = 0;
+		recv_buf[recv_head++] = usart_recv(LBUS_USART);
+		recv_head = recv_head % RECV_SIZE;
+	}
 }
 
 int main(void) {
@@ -167,13 +191,17 @@ int main(void) {
 	while((USART_SR(LBUS_USART) & USART_SR_RXNE) != 0)
 		usart_recv(LBUS_USART);
 
+	/* Enable the USART interrupt. */
+	nvic_enable_irq(LBUS_USART_IRQ);
+
 	/* configure and enable USART. */
-	USART_CR1(LBUS_USART) |= USART_CR1_TE | USART_CR1_UE;
+	USART_CR1(LBUS_USART) |= USART_CR1_RXNEIE | USART_CR1_RE | USART_CR1_TE | USART_CR1_UE;
 
 	/* set up a timer for timing out packet receives: */
 	RCC_APB2RSTR |= RCC_APB2RSTR_TIM1RST;
 	RCC_APB2RSTR &= ~RCC_APB2RSTR_TIM1RST;
 	TIM_PSC(TIM1) = ((CPU_SPEED/2)/10000); // 1 tick = 100 usec
+	TIM_EGR(TIM1) |= TIM_EGR_UG;
 
 	/* set up USB driver */
 	usbd_dev = usbd_init(&st_usbfs_v1_usb_driver, &dev, &config, usb_strings, 3, usbd_control_buffer, sizeof(usbd_control_buffer));
