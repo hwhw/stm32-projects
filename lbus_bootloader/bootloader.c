@@ -93,7 +93,7 @@ static int check_firmware(void) {
 }
 
 /* LBUS handler for READ_MEMORY request */
-static void handle_READ_MEMORY(const uint8_t rbyte, const struct lbus_hdr *header, const int p) {
+static void handle_READ_MEMORY(const uint8_t rbyte, const struct lbus_hdr *header, const unsigned int p) {
 	LBUS_HANDLE_COMPLETE(static struct lbus_READ_MEMORY, d, p, rbyte) {
 		uint32_t *src = (uint32_t*) d.address;
 		lbus_start_tx();
@@ -109,7 +109,7 @@ static void handle_READ_MEMORY(const uint8_t rbyte, const struct lbus_hdr *heade
 }
 
 /* LBUS handler for GET_DATA request */
-static void handle_GET_DATA(const uint8_t rbyte, const struct lbus_hdr *header, const int p) {
+static void handle_GET_DATA(const uint8_t rbyte, const struct lbus_hdr *header, const unsigned int p) {
 	LBUS_HANDLE_COMPLETE(static struct lbus_GET_DATA, d, p, rbyte) {
 		lbus_start_tx();
 		switch(d.type) {
@@ -137,7 +137,7 @@ static void handle_GET_DATA(const uint8_t rbyte, const struct lbus_hdr *header, 
 				}
 				break;
 			case LBUS_DATA_FIRMWARE_NAME:
-				for(int i=0; i < header->length - p; i++)
+				for(unsigned int i=0; i < header->length - p; i++)
 					lbus_send(firmware_config->name[i]);
 				break;
 			default:
@@ -154,7 +154,7 @@ static void handle_GET_DATA(const uint8_t rbyte, const struct lbus_hdr *header, 
  *  0: success
  *  other: error storing address in config section in flash memory
  */
-static void handle_SET_ADDRESS(const uint8_t rbyte, const struct lbus_hdr *header, const int p) {
+static void handle_SET_ADDRESS(const uint8_t rbyte, const struct lbus_hdr *header, const unsigned int p) {
 	(void)header;
 	LBUS_HANDLE_COMPLETE(static struct lbus_SET_ADDRESS, d, p, rbyte) {
 		lbus_start_tx();
@@ -173,7 +173,7 @@ static void handle_SET_ADDRESS(const uint8_t rbyte, const struct lbus_hdr *heade
  *  1: bad page_id
  *  2: bad CRC
  */
-static void handle_FLASH_FIRMWARE(const uint8_t rbyte, const struct lbus_hdr *header, const int p) {
+static void handle_FLASH_FIRMWARE(const uint8_t rbyte, const struct lbus_hdr *header, const unsigned int p) {
 	(void)header;
 	LBUS_HANDLE_COMPLETE(static struct lbus_FLASH_FIRMWARE, d, p, rbyte) {
 		lbus_start_tx();
@@ -226,7 +226,6 @@ lbus_recv_func lbus_handler(const struct lbus_hdr *header) {
 		case PING:
 			lbus_start_tx();
 			lbus_send(1);
-			lbus_end_pkg();
 			break;
 		case GET_DATA:
 			return handle_GET_DATA;
