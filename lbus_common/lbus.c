@@ -28,6 +28,9 @@
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/timer.h>
 #include <libopencm3/stm32/usart.h>
+#include <libopencm3/stm32/pwr.h>
+#include <libopencm3/stm32/f1/bkp.h>
+#include <libopencm3/cm3/scb.h>
 
 #include "lbus.h"
 #include "platform.h"
@@ -45,8 +48,10 @@ uint8_t lbus_address;
  * the packet - either directly or by setting a new receive callback
  * for further packet data
  */
-static void recv(const uint8_t rbyte, const struct lbus_hdr* hdr, const int p) {
-	((uint8_t*)hdr)[p-1] = rbyte;
+static void recv(const uint8_t rbyte, const struct lbus_hdr* hdr, const unsigned int p) {
+	if(p <= sizeof(*hdr)) {
+		((uint8_t*)hdr)[p-1] = rbyte;
+	}
 	if(p == sizeof(*hdr)) {
 		if(hdr->addr == 0xFF || hdr->addr == lbus_address) {
 			recv_func = lbus_handler(hdr);
@@ -54,7 +59,16 @@ static void recv(const uint8_t rbyte, const struct lbus_hdr* hdr, const int p) {
 			recv_func = NULL;
 		}
 	}
+	/* pkg_pos might be more actual here than the <p> value, when the lbus_handler
+	 * has sent some data.
+	 */
+	if(pkg_pos >= 2 && pkg_pos == hdr->length) {
+		/* in any case reset state when a packet is complete (as indicated by the length) */
+		lbus_end_pkg();
+	}
 }
+
+static bool transmitting = false;
 
 /* End transmit mode, switch back to receive mode
  *
@@ -63,14 +77,19 @@ static void recv(const uint8_t rbyte, const struct lbus_hdr* hdr, const int p) {
  * order.
  */
 void lbus_end_pkg(void) {
+	if(transmitting) {
+		/* wait until everything has been sent */
+		while((USART_SR(LBUS_USART) & USART_SR_TC) == 0) __asm("nop");
+		/* tie low MAX485 DE/~RE */
+		gpio_clear(LBUS_DE_GPIO, LBUS_DE_PIN);
+		gpio_clear(LBUS_RE_GPIO, LBUS_RE_PIN);
+		/* enable RX interrupt: */
+		USART_CR1(LBUS_USART) |= USART_CR1_RXNEIE;
+		transmitting = false;
+	}
 	TIM_CR1(TIM1) &= ~TIM_CR1_CEN;
 	pkg_pos = 0;
 	recv_func = recv;
-	/* tie low MAX485 DE/~RE */
-	gpio_clear(LBUS_DE_GPIO, LBUS_DE_PIN);
-	gpio_clear(LBUS_RE_GPIO, LBUS_RE_PIN);
-	/* enable RX interrupt: */
-	USART_CR1(LBUS_USART) |= USART_CR1_RXNEIE;
 }
 
 /* USART interrupt service routine
@@ -89,12 +108,11 @@ void LBUS_USART_ISR(void) {
 		/* use recv_func to handle incoming bytes */
 		pkg_pos++;
 		/* call receive handler callback function, if set */
-		if(recv_func)
+		if(recv_func) {
 			recv_func(usart_recv(LBUS_USART), &lbus_header, pkg_pos);
-
-		/* in any case reset state when a packet is complete (as indicated by the length) */
-		if(pkg_pos >= 2 && pkg_pos >= lbus_header.length) {
-			lbus_end_pkg();
+		} else {
+			/* otherwise, just consume the data */
+			usart_recv(LBUS_USART);
 		}
 	}
 }
@@ -128,6 +146,10 @@ void lbus_start_tx(void) {
 	TIM_CR1(TIM1) |= TIM_CR1_CEN;
 	while(TIM1_CNT < LBUS_TX_WAIT) { __asm("nop"); }
 	TIM_CR1(TIM1) &= ~TIM_CR1_CEN;
+	/*
+	for(int i=0; i<100; i++) __asm("nop");
+	*/
+	transmitting = true;
 }
 
 /* Set up LBUS handling (RX/TX/DE/RE lines, ISRs etc.)
@@ -136,6 +158,9 @@ void lbus_start_tx(void) {
  */
 void lbus_init(void) {
 	lbus_address = config_get_uint32(CONFIG_LBUS_ADDRESS);
+
+	RCC_APB2ENR |= (RCC_APB2ENR_TIM1EN | RCC_APB2ENR_IOPBEN | RCC_APB2ENR_AFIOEN);
+	RCC_APB1ENR |= (RCC_APB1ENR_PWREN | RCC_APB1ENR_BKPEN | RCC_APB1ENR_USART3EN);
 
 	/* Enable the USART interrupt. */
 	nvic_enable_irq(LBUS_USART_IRQ);
@@ -171,6 +196,17 @@ void lbus_init(void) {
 
 	/* mis-use end-of-packet function to enforce state reset */
 	lbus_end_pkg();
+}
+
+/* Trigger a reboot and request a normal boot */
+void lbus_reset_to_bootloader(void) {
+	/* disable backup domain write protection */
+	PWR_CR |= PWR_CR_DBP;
+	/* bootloader operation mode */
+	BKP_DR1 = BOOTFLAG_GOTO_BOOTLOADER;
+	/* software reset */
+	SCB_AIRCR = SCB_AIRCR_VECTKEY | SCB_AIRCR_SYSRESETREQ;
+	while (1);
 }
 
 /* Send a single byte over LBUS */

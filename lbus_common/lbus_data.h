@@ -68,4 +68,15 @@ struct lbus_FLASH_FIRMWARE {
 	uint32_t crc;
 } __packed;
 
+struct lbus_pkg {
+	struct lbus_hdr hdr;
+	union {
+		struct lbus_GET_DATA GET_DATA;
+		struct lbus_LED_SET_16BIT LED_SET_16BIT;
+		struct lbus_SET_ADDRESS SET_ADDRESS;
+		struct lbus_READ_MEMORY READ_MEMORY;
+		struct lbus_FLASH_FIRMWARE FLASH_FIRMWARE;
+	};
+} __packed;
+
 #endif

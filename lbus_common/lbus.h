@@ -36,13 +36,14 @@ void lbus_send_buf(const void *buf, const int length);
 inline void lbus_send32(const uint32_t *txwordptr) { lbus_send_buf(txwordptr, 4); }
 void lbus_start_tx(void);
 void lbus_end_pkg(void);
+void lbus_reset_to_bootloader(void);
 
 /* For receiving packet data (following the packet header), define a matching lbus_recv_func:
  * it will be called for each received byte (rbyte) and has access to the packet header and
  * a counter for the current position within the packet (starting at 1 for the first byte
  * in the packet).
  */
-typedef void (*lbus_recv_func)(const uint8_t rbyte, const struct lbus_hdr *header, const int p);
+typedef void (*lbus_recv_func)(const uint8_t rbyte, const struct lbus_hdr *header, const unsigned int p);
 /* define this in your application to handle LBUS communication: */
 extern lbus_recv_func lbus_handler(const struct lbus_hdr *header);
 
