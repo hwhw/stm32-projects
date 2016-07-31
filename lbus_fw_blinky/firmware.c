@@ -46,9 +46,66 @@ struct config_section_s firmware_config = {
 
 #define CPU_SPEED 72000000
 
-/* handle no LBUS packets at all */
+/* LBUS handler for GET_DATA request */
+static void handle_GET_DATA(const uint8_t rbyte, const struct lbus_hdr *header, const unsigned int p) {
+	LBUS_HANDLE_COMPLETE(static struct lbus_GET_DATA, d, p, rbyte) {
+		lbus_start_tx();
+		switch(d.type) {
+			case LBUS_DATA_STATUS:
+				lbus_send(LBUS_STATE_IN_FIRMWARE);
+				break;
+			case LBUS_DATA_ADDRESS: {
+					uint32_t lbus_address = config_get_uint32(CONFIG_LBUS_ADDRESS);
+					lbus_send(lbus_address);
+				}
+				break;
+			case LBUS_DATA_FIRMWARE_VERSION:
+				lbus_send32(&firmware_config.version);
+				break;
+			case LBUS_DATA_BOOTLOADER_VERSION:
+				{
+					uint32_t bootloader_version = (BKP_DR3 << 16) | BKP_DR2;
+					lbus_send32(&bootloader_version);
+				}
+				break;
+			case LBUS_DATA_FIRMWARE_NAME_LENGTH:
+				{
+					uint8_t l=0;
+					for(const char* n=firmware_config.name; *n != '\0'; n++) 
+						l++;
+					lbus_send(l);
+				}
+				break;
+			case LBUS_DATA_FIRMWARE_NAME:
+				for(unsigned int i=0; i < header->length - p; i++)
+					lbus_send(firmware_config.name[i]);
+				break;
+			default:
+				for(int i=p; i<header->length; i++) 
+					lbus_send(0);
+		}
+		lbus_end_pkg();
+	}
+}
+
+/* LBUS request handling
+ *
+ * For some operations, further data is pending. In these cases,
+ * a handler function for this data is returned. If no further data
+ * is to be handled, NULL is returned.
+ */
 lbus_recv_func lbus_handler(const struct lbus_hdr *header) {
-	(void)header;
+	switch(header->cmd) {
+		case PING:
+			lbus_start_tx();
+			lbus_send(1);
+			break;
+		case GET_DATA:
+			return handle_GET_DATA;
+		case RESET_TO_BOOTLOADER:
+			lbus_reset_to_bootloader();
+			break;
+	}
 	return NULL;
 }
 
@@ -59,7 +116,6 @@ static void gpio_setup(void) {
 }
 
 void tim3_isr(void) {
-	//timer_disable_counter(TIM1);
 	gpio_toggle(GPIOC, GPIO13);
 	TIM_SR(TIM3) &= ~TIM_SR_UIF;
 }
@@ -69,6 +125,8 @@ int main(void) {
 	rcc_periph_clock_enable(RCC_TIM3);
 
 	gpio_setup();
+
+	lbus_init();
 
 	timer_reset(TIM3);
 	nvic_enable_irq(NVIC_TIM3_IRQ);
