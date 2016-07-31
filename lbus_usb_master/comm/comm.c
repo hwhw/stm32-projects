@@ -383,6 +383,28 @@ int main(int argc, char* argv[]) {
 		} else {
 			fprintf(stderr, "error or no reply\n");
 		}
+	} else if(!strcasecmp("led_set_16bit", cmd)) {
+		if(optind + 1 >= argc) {
+			fprintf(stderr, "usage: ... %s <led> <value> [<value> ...]\n", cmd);
+			goto done;
+		}
+		int c = argc - (optind + 1);
+		int led = strtoul(argv[optind++], NULL, 0);
+		struct {
+			struct lbus_hdr hdr;
+			uint16_t led;
+			uint16_t values[1024];
+		} __attribute__((packed)) pkg = {
+			.hdr = {
+				.length = sizeof(struct lbus_hdr)+sizeof(uint16_t)*(c+1),
+				.addr = dst,
+				.cmd = LED_SET_16BIT,
+			},
+			.led = led
+		};
+		for(int i=0; i<c; i++)
+			pkg.values[i] = strtoul(argv[optind++], NULL, 0);
+		tx(&pkg, pkg.hdr.length);
 	} else if(!strcasecmp("flash_firmware", cmd)) {
 		if(optind >= argc) {
 			fprintf(stderr, "usage: ... %s <firmware.bin>\n", cmd);
