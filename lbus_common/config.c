@@ -31,7 +31,7 @@
  * slot not yet filled with config data).
  * If no config for the given type is found, NULL will be returned.
  */
-struct config_item* find_item(const uint32_t type) {
+struct config_item* config_find_item(const uint32_t type) {
 	struct config_item* found = NULL;
 	void *config = (void*)CONFIG_ADDRESS;
 	while(config < (void*)(CONFIG_ADDRESS + CONFIG_SIZE)) {
@@ -48,7 +48,7 @@ struct config_item* find_item(const uint32_t type) {
 
 /* convenience function for accessing configuration consisting of one word of data */
 uint32_t config_get_uint32(const uint32_t type) {
-	void *dst = find_item(type);
+	void *dst = config_find_item(type);
 	if(dst == NULL) return 0;
 	return *((uint32_t*)(dst + sizeof(struct config_item)));
 }
@@ -61,7 +61,7 @@ uint32_t config_get_uint32(const uint32_t type) {
  *         -1 when there is not enough space for the requested length
  */
 int config_write(const uint32_t type, const uint32_t length, const void* data) {
-	uint32_t *dst = (uint32_t*) find_item(CONFIG_UNSET);
+	uint32_t *dst = (uint32_t*) config_find_item(CONFIG_UNSET);
 	if(dst == NULL)
 		return -2;
 	if(dst + length + 3 >= (uint32_t*)(CONFIG_ADDRESS + CONFIG_SIZE))

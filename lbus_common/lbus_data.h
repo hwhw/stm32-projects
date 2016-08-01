@@ -12,9 +12,9 @@ enum lbus_cmd {
 	NOP = 0, // reserved
 	PING,
 	GET_DATA,
-	SET_GROUPS,
 	LED_SET_16BIT = 10,
 	LED_COMMIT,
+	LED_SET_8BIT,
 	RESET_TO_BOOTLOADER = 122,
 	ERASE_CONFIG,
 	SET_ADDRESS,
@@ -54,6 +54,11 @@ struct lbus_LED_SET_16BIT {
 	uint16_t color[];
 } __packed;
 
+struct lbus_LED_SET_8BIT {
+	uint16_t led;
+	uint8_t color[];
+} __packed;
+
 struct lbus_SET_ADDRESS {
 	uint8_t naddr;
 } __packed;
@@ -73,6 +78,7 @@ struct lbus_pkg {
 	union {
 		struct lbus_GET_DATA GET_DATA;
 		struct lbus_LED_SET_16BIT LED_SET_16BIT;
+		struct lbus_LED_SET_8BIT LED_SET_8BIT;
 		struct lbus_SET_ADDRESS SET_ADDRESS;
 		struct lbus_READ_MEMORY READ_MEMORY;
 		struct lbus_FLASH_FIRMWARE FLASH_FIRMWARE;
