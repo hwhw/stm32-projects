@@ -142,13 +142,15 @@ void lbus_start_tx(void) {
 	gpio_set(LBUS_RE_GPIO, LBUS_RE_PIN);
 	gpio_set(LBUS_DE_GPIO, LBUS_DE_PIN);
 	/* now wait a bit */
+	/*
 	TIM1_CNT = 0;
 	TIM_CR1(TIM1) |= TIM_CR1_CEN;
 	while(TIM1_CNT < LBUS_TX_WAIT) { __asm("nop"); }
 	TIM_CR1(TIM1) &= ~TIM_CR1_CEN;
-	/*
-	for(int i=0; i<100; i++) __asm("nop");
 	*/
+	///*
+	for(int i=0; i<100; i++) __asm("nop");
+	//*/
 	transmitting = true;
 }
 

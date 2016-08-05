@@ -185,6 +185,7 @@ static void handle_FLASH_FIRMWARE(const uint8_t rbyte, const struct lbus_hdr *he
 		}
 		/* check CRC32 of received page data */
 		CRC_CR = 1; /* reset */
+		for(int i=0; i<100; i++) __asm("nop");
 		for(int i=0; i<FLASH_PAGE_SIZE; i+=4) CRC_DR = *((uint32_t*)(d.data+i));
 		if(CRC_DR != d.crc) {
 			lbus_send(2);
@@ -193,9 +194,21 @@ static void handle_FLASH_FIRMWARE(const uint8_t rbyte, const struct lbus_hdr *he
 		/* flash page */
 		flash_unlock();
 		flash_erase_page(dst);
-		for(int i=0; i<FLASH_PAGE_SIZE; i+=4) {
-			flash_program_word(dst+i, *((uint32_t*)(d.data+i)));
+		flash_wait_for_last_operation();
+		if(*(uint32_t*)dst != 0xFFFFFFFF) {
+			lbus_send(3);
+			goto done;
 		}
+		for(int i=0; i<FLASH_PAGE_SIZE; i+=4) {
+			const uint32_t w = *((uint32_t*)(d.data+i));
+			flash_program_word(dst+i, w);
+			flash_wait_for_last_operation();
+			if(*(uint32_t*)(dst+i) != w) {
+				lbus_send(4);
+				goto done;
+			}
+		}
+		flash_wait_for_last_operation();
 		flash_lock();
 		lbus_send(0);
 done:
