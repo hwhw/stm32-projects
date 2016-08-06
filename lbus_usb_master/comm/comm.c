@@ -12,6 +12,19 @@
 
 #include "../../lbus_common/lbus_data.h"
 
+static inline uint16_t tole16(const uint16_t x)
+{
+        union {
+                uint8_t  b8[2];
+                uint16_t b16;
+        } _tmp;
+        _tmp.b8[1] = (uint8_t) (x >> 8);
+        _tmp.b8[0] = (uint8_t) (x & 0xff);
+        return _tmp.b16;
+}
+#define le16 tole16
+
+
 static libusb_context *ctx = NULL;
 static libusb_device_handle *dev;
 
@@ -171,7 +184,7 @@ int main(int argc, char* argv[]) {
 	char *cmd = argv[optind++];
 	if(!strcasecmp("ping", cmd)) {
 		struct lbus_hdr pkg = {
-			.length = sizeof(struct lbus_hdr)+1,
+			.length = tole16(sizeof(struct lbus_hdr)+1),
 			.addr = dst,
 			.cmd = PING
 		};
@@ -185,7 +198,7 @@ int main(int argc, char* argv[]) {
 		}
 	} else if(!strcasecmp("reset_to_bootloader", cmd)) {
 		struct lbus_hdr pkg = {
-			.length = sizeof(struct lbus_hdr),
+			.length = tole16(sizeof(struct lbus_hdr)),
 			.addr = dst,
 			.cmd = RESET_TO_BOOTLOADER
 		};
@@ -193,7 +206,7 @@ int main(int argc, char* argv[]) {
 		goto success;
 	} else if(!strcasecmp("reset_to_firmware", cmd)) {
 		struct lbus_hdr pkg = {
-			.length = sizeof(struct lbus_hdr),
+			.length = tole16(sizeof(struct lbus_hdr)),
 			.addr = dst,
 			.cmd = RESET_TO_FIRMWARE
 		};
@@ -201,7 +214,7 @@ int main(int argc, char* argv[]) {
 		goto success;
 	} else if(!strcasecmp("erase_config", cmd)) {
 		struct lbus_hdr pkg = {
-			.length = sizeof(struct lbus_hdr),
+			.length = tole16(sizeof(struct lbus_hdr)),
 			.addr = dst,
 			.cmd = ERASE_CONFIG
 		};
@@ -216,13 +229,14 @@ int main(int argc, char* argv[]) {
 					.cmd = GET_DATA,
 				},
 				.GET_DATA = {
-					.type = 0
+					.type = tole16(0)
 				}
 			};
 			if(!strcasecmp("status", argv[optind])) {
-				pkg.GET_DATA.type = LBUS_DATA_STATUS;
+				pkg.GET_DATA.type = tole16(LBUS_DATA_STATUS);
 				uint8_t r;
 				pkg.hdr.length += sizeof(r);
+				pkg.hdr.length = tole16(pkg.hdr.length);
 				tx(&pkg, sizeof(struct lbus_hdr)+sizeof(struct lbus_GET_DATA));
 				if(rx(&r, sizeof(r)) == sizeof(r)) {
 					printf("%d\n", r);
@@ -234,6 +248,7 @@ int main(int argc, char* argv[]) {
 				pkg.GET_DATA.type = LBUS_DATA_ADDRESS;
 				uint8_t r;
 				pkg.hdr.length += sizeof(r);
+				pkg.hdr.length = tole16(pkg.hdr.length);
 				tx(&pkg, sizeof(struct lbus_hdr)+sizeof(struct lbus_GET_DATA));
 				if(rx(&r, sizeof(r)) == sizeof(r)) {
 					printf("0x%X\n", r);
@@ -245,6 +260,7 @@ int main(int argc, char* argv[]) {
 				pkg.GET_DATA.type = LBUS_DATA_FIRMWARE_VERSION;
 				uint32_t r;
 				pkg.hdr.length += sizeof(r);
+				pkg.hdr.length = tole16(pkg.hdr.length);
 				tx(&pkg, sizeof(struct lbus_hdr)+sizeof(struct lbus_GET_DATA));
 				if(rx(&r, sizeof(r)) == sizeof(r)) {
 					printf("%x\n", r);
@@ -256,6 +272,7 @@ int main(int argc, char* argv[]) {
 				pkg.GET_DATA.type = LBUS_DATA_BOOTLOADER_VERSION;
 				uint32_t r;
 				pkg.hdr.length += sizeof(r);
+				pkg.hdr.length = tole16(pkg.hdr.length);
 				tx(&pkg, sizeof(struct lbus_hdr)+sizeof(struct lbus_GET_DATA));
 				if(rx(&r, sizeof(r)) == sizeof(r)) {
 					printf("%x\n", r);
@@ -267,11 +284,12 @@ int main(int argc, char* argv[]) {
 				pkg.GET_DATA.type = LBUS_DATA_FIRMWARE_NAME_LENGTH;
 				uint8_t r;
 				pkg.hdr.length += sizeof(r);
+				pkg.hdr.length = tole16(pkg.hdr.length);
 				tx(&pkg, sizeof(struct lbus_hdr)+sizeof(struct lbus_GET_DATA));
 				if(rx(&r, sizeof(r)) == sizeof(r)) {
 					uint8_t nbuf[256];
 					pkg.GET_DATA.type = LBUS_DATA_FIRMWARE_NAME;
-					pkg.hdr.length = sizeof(struct lbus_hdr)+sizeof(struct lbus_GET_DATA)+r;
+					pkg.hdr.length = tole16(sizeof(struct lbus_hdr)+sizeof(struct lbus_GET_DATA)+r);
 					tx(&pkg, sizeof(struct lbus_hdr)+sizeof(struct lbus_GET_DATA));
 					if(rx(&nbuf, r) == r) {
 						nbuf[r] = '\0';
@@ -299,12 +317,12 @@ int main(int argc, char* argv[]) {
 			}
 			struct lbus_pkg pkg = {
 				.hdr = {
-					.length = sizeof(struct lbus_hdr)+sizeof(struct lbus_GET_DATA)+reply_size,
+					.length = tole16(sizeof(struct lbus_hdr)+sizeof(struct lbus_GET_DATA)+reply_size),
 					.addr = dst,
 					.cmd = GET_DATA,
 				},
 				.GET_DATA = {
-					.type = item
+					.type = tole16(item)
 				}
 			};
 			tx(&pkg, sizeof(struct lbus_hdr)+sizeof(struct lbus_GET_DATA));
@@ -331,7 +349,7 @@ int main(int argc, char* argv[]) {
 		}
 		struct lbus_pkg pkg = {
 			.hdr = {
-				.length = sizeof(struct lbus_hdr)+sizeof(struct lbus_SET_ADDRESS)+1,
+				.length = tole16(sizeof(struct lbus_hdr)+sizeof(struct lbus_SET_ADDRESS)+1),
 				.addr = dst,
 				.cmd = SET_ADDRESS,
 			},
@@ -360,7 +378,7 @@ int main(int argc, char* argv[]) {
 		}
 		struct lbus_pkg pkg = {
 			.hdr = {
-				.length = sizeof(struct lbus_hdr)+sizeof(struct lbus_READ_MEMORY)+length+4,
+				.length = tole16(sizeof(struct lbus_hdr)+sizeof(struct lbus_READ_MEMORY)+length+4),
 				.addr = dst,
 				.cmd = READ_MEMORY,
 			},
@@ -396,18 +414,18 @@ int main(int argc, char* argv[]) {
 			uint16_t values[1024];
 		} __attribute__((packed)) pkg = {
 			.hdr = {
-				.length = sizeof(struct lbus_hdr)+sizeof(uint16_t)*(c+1),
+				.length = tole16(sizeof(struct lbus_hdr)+sizeof(uint16_t)*(c+1)),
 				.addr = dst,
 				.cmd = LED_SET_16BIT,
 			},
-			.led = led
+			.led = tole16(led)
 		};
 		for(int i=0; i<c; i++)
-			pkg.values[i] = strtoul(argv[optind++], NULL, 0);
+			pkg.values[i] = tole16(strtoul(argv[optind++], NULL, 0));
 		tx(&pkg, pkg.hdr.length);
 	} else if(!strcasecmp("led_commit", cmd)) {
 		struct lbus_hdr pkg = {
-			.length = sizeof(struct lbus_hdr),
+			.length = tole16(sizeof(struct lbus_hdr)),
 			.addr = dst,
 			.cmd = LED_COMMIT
 		};
@@ -454,11 +472,11 @@ int main(int argc, char* argv[]) {
 				uint32_t crc;
 			} __attribute__((packed)) pkg = {
 				.hdr = {
-					.length = sizeof(struct lbus_hdr) + sizeof(uint16_t) + PAGE_SIZE + sizeof(uint32_t) + 1,
+					.length = tole16(sizeof(struct lbus_hdr) + sizeof(uint16_t) + PAGE_SIZE + sizeof(uint32_t) + 1),
 					.addr = dst,
 					.cmd = FLASH_FIRMWARE
 				},
-				.page = pg,
+				.page = tole16(pg),
 			};
 			memcpy(pkg.data, p, PAGE_SIZE);
 			pkg.crc = crc32(0xFFFFFFFF, PAGE_SIZE, p);
