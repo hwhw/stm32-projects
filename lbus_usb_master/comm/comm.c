@@ -405,6 +405,14 @@ int main(int argc, char* argv[]) {
 		for(int i=0; i<c; i++)
 			pkg.values[i] = strtoul(argv[optind++], NULL, 0);
 		tx(&pkg, pkg.hdr.length);
+	} else if(!strcasecmp("led_commit", cmd)) {
+		struct lbus_hdr pkg = {
+			.length = sizeof(struct lbus_hdr),
+			.addr = dst,
+			.cmd = LED_COMMIT
+		};
+		tx(&pkg, sizeof(pkg));
+		goto success;
 	} else if(!strcasecmp("flash_firmware", cmd)) {
 		if(optind >= argc) {
 			fprintf(stderr, "usage: ... %s <firmware.bin>\n", cmd);
@@ -440,33 +448,35 @@ int main(int argc, char* argv[]) {
 		uint16_t pg = FW_START_PAGE;
 		for(void *p = fwbuf; p < (fwbuf+fw_pg_size); p+=PAGE_SIZE) {
 			struct {
-			       struct lbus_hdr hdr;
-			       uint16_t page;
+				struct lbus_hdr hdr;
+				uint16_t page;
+				uint8_t data[PAGE_SIZE];
+				uint32_t crc;
 			} __attribute__((packed)) pkg = {
 				.hdr = {
 					.length = sizeof(struct lbus_hdr) + sizeof(uint16_t) + PAGE_SIZE + sizeof(uint32_t) + 1,
 					.addr = dst,
 					.cmd = FLASH_FIRMWARE
 				},
-				.page = pg
+				.page = pg,
 			};
+			memcpy(pkg.data, p, PAGE_SIZE);
+			pkg.crc = crc32(0xFFFFFFFF, PAGE_SIZE, p);
 			tx(&pkg, sizeof(pkg));
-			tx(p, PAGE_SIZE);
-			uint32_t crc = crc32(0xFFFFFFFF, PAGE_SIZE, p);
-			tx(&crc, 4);
-			uint8_t reply=1;
+			uint8_t reply=0x7F;
 			for(int i=0; i<10; i++) {
-				if(rx(&reply, 1) == 1 && reply == 0) {
-					fprintf(stderr, "<%02X>", pg);
+				if(rx(&reply, 1) == 1) {
 					break;
 				} else {
 					fprintf(stderr, ".");
 					usleep(100000);
 				}
 			}
-			if(reply != 0) {
+			if(reply == 0) {
+				fprintf(stderr, "<%02X>", pg);
+			} else {
 				close(ffd);
-				fprintf(stderr, " failure!\n");
+				fprintf(stderr, " failure %d!\n", reply);
 				goto done;
 			}
 			pg++;
