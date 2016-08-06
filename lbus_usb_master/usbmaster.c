@@ -102,9 +102,11 @@ static void usbmaster_receive_cb(usbd_device *usbd_dev, uint8_t ep) {
 	const uint8_t cmd = buf[0];
 
 	if(cmd == CMD_XMIT) {
-		//USART_CR1(LBUS_USART) &= ~USART_CR1_RE;
+		USART_CR1(LBUS_USART) &= ~USART_CR1_RE;
+		__asm__("nop");
 		gpio_set(LBUS_RE_GPIO, LBUS_RE_PIN);
 		gpio_set(LBUS_DE_GPIO, LBUS_DE_PIN);
+		for(int i=0; i<100; i++) __asm__("nop");
 		for(int i=1; i<len; i++) {
 			usart_send_blocking(LBUS_USART, buf[i]);
 		}
@@ -112,7 +114,8 @@ static void usbmaster_receive_cb(usbd_device *usbd_dev, uint8_t ep) {
 		recv_tail = recv_head; // drop current RX queue contents
 		gpio_clear(LBUS_DE_GPIO, LBUS_DE_PIN);
 		gpio_clear(LBUS_RE_GPIO, LBUS_RE_PIN);
-		//USART_CR1(LBUS_USART) |= USART_CR1_RE;
+		for(int i=0; i<80; i++) __asm__("nop");
+		USART_CR1(LBUS_USART) |= USART_CR1_RE;
 	} else if(cmd == CMD_RECV) {
 		if(len < 2) return;
 		const uint8_t size = buf[1];
@@ -124,7 +127,7 @@ static void usbmaster_receive_cb(usbd_device *usbd_dev, uint8_t ep) {
 				buf[i++] = recv_buf[recv_tail++];
 				recv_tail = recv_tail % RECV_SIZE;
 			}
-			if(TIM1_CNT > 3+LBUS_TIMEOUT) {
+			if(TIM1_CNT > 1000/*LBUS_TIMEOUT*/) {
 				break;
 			}
 		}
