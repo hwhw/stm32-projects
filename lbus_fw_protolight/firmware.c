@@ -195,20 +195,21 @@ static void commit(void) {
 }
 
 static void handle_LED_SET_16BIT(const uint8_t rbyte, const struct lbus_hdr *header, const unsigned int p) {
-	static uint16_t data[4*3+1]; 
-	if(sizeof(struct lbus_hdr)+sizeof(uint16_t)*(4*3+1) >= p)
-		((uint8_t*)&data)[p-sizeof(struct lbus_hdr)-1] = rbyte;
+	static struct {
+		uint16_t offset;
+		uint16_t data[4*3];
+	} in;
+	if(sizeof(struct lbus_hdr)+sizeof(in) >= p)
+		((uint8_t*)&in)[p-sizeof(struct lbus_hdr)-1] = rbyte;
 	if(p == header->length) {
-		uint16_t offset = data[0];
-		uint16_t num_values = (p-sizeof(struct lbus_hdr)-sizeof(uint16_t)-1) / sizeof(uint16_t);
-		int n = 1;
-		while(num_values > 0) {
-			if(offset < 12) {
-				values[offset++] = data[n];
-				num_values--;
-				n++;
+		uint16_t n = (p-sizeof(struct lbus_hdr)-sizeof(uint16_t)) / sizeof(uint16_t);
+		while(n-- > 0) {
+			const int led = in.offset+n;
+			if(led < 12) {
+				values[led] = in.data[n];
 			}
 		}
+		lbus_end_pkg();
 	}
 }
 
@@ -230,6 +231,7 @@ static void handle_LED_SET_8BIT(const uint8_t rbyte, const struct lbus_hdr *head
 				n++;
 			}
 		}
+		lbus_end_pkg();
 	}
 }
 
