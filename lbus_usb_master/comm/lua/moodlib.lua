@@ -11,12 +11,12 @@ local dirty = {}
 
 function L.set(x, y, r, g, b)
 	local controller = leds[x][y][1]
-	table.insert(dirty, controller)
+	dirty[controller] = true
 	led_set_16bit(controller, leds[x][y][2]*3, {r, g, b})
 end
 
 function L.commit()
-	for _, c in ipairs(dirty) do
+	for c, _ in pairs(dirty) do
 		led_commit(c)
 	end
 	dirty = {}
