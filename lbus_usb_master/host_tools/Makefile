@@ -1,11 +1,25 @@
-CC := gcc
-CFLAGS := $(shell pkg-config --cflags lua) $(shell pkg-config --cflags libusb-1.0)
-LDFLAGS := $(shell pkg-config --libs lua) $(shell pkg-config --libs libusb-1.0)
-#CFLAGS = `pkg-config --cflags lua`
-#LDFLAGS = `pkg-config --libs libusb-1.0`
+CC:=$(ARCH)gcc
+LUA:=lua51
 
-comm: comm.o
-comm.o: comm.c
+all: liblbuscomm.so lbus-tool lualbuscomm.so
 
 clean:
-	rm comm.o comm
+	rm -f *.o *.so lbus-tool
+
+lbuscomm.o: lbuscomm.c
+	$(CC) $(CFLAGS) -shared -fPIC -fvisibility=hidden $(shell pkg-config --cflags libusb-1.0) -c $< -o $@
+
+liblbuscomm.so: lbuscomm.o
+	$(CC) $(LDFLAGS) -shared -fPIC $(shell pkg-config --libs libusb-1.0) $< -o $@
+
+lualbuscomm.o: lualbuscomm.c
+	$(CC) $(CFLAGS) -shared -fPIC $(shell pkg-config --cflags $(LUA)) -c $< -o $@
+
+lualbuscomm.so: lualbuscomm.o lbuscomm.o
+	$(CC) $(LDFLAGS) -shared -fPIC $(shell pkg-config --libs $(LUA)) $< -o $@
+
+lbus-tool: lbus-tool.o
+	$(CC) $(LDFLAGS) -L. -llbuscomm $< -o $@
+
+lbus-tool.o: lbus-tool.c
+	$(CC) $(CFLAGS) -c $< -o $@
