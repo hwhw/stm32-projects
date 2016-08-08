@@ -1,4 +1,5 @@
 #!./comm
+-- a nice and slow moving rainbow animation
 local M=require"moodlib"
 
 local function hue2rgb(p, q, t)

@@ -1,4 +1,6 @@
 #!./comm
+-- a RGB pattern animation - mostly for testing the LEDs
+
 local M=require"moodlib"
 
 local offs = 1

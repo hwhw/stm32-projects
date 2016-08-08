@@ -1,4 +1,4 @@
-/* Example firmware application for use with LBUS bootloader
+/* PWM controller for 12 channels
  *
  * Copyright (c) 2016 Hans-Werner Hilse <hwhilse@gmail.com>
  *
