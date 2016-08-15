@@ -55,8 +55,6 @@ static void recv(const uint8_t rbyte, const struct lbus_hdr* hdr, const unsigned
 	if(p == sizeof(*hdr)) {
 		if(hdr->addr == 0xFF || hdr->addr == lbus_address) {
 			recv_func = lbus_handler(hdr);
-		} else {
-			recv_func = NULL;
 		}
 	}
 	/* pkg_pos might be more actual here than the <p> value, when the lbus_handler
