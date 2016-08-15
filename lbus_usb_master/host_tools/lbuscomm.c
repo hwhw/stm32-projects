@@ -153,7 +153,7 @@ int lbus_tx(lbus_ctx* C, const void* buf, const int size) {
 		const int chunk_size = (size-done) > 63 ? 63 : (size-done);
 		tbuf[0] = 1; // XMIT
 		memcpy(tbuf+1, buf+done, chunk_size);
-		int res = libusb_bulk_transfer(C->dev, 0x03, tbuf, chunk_size+1, &transferred, LIBUSB_TXTIMEOUT);
+		int res = libusb_bulk_transfer(C->dev, 0x01, tbuf, chunk_size+1, &transferred, LIBUSB_TXTIMEOUT);
 		if(res == 0 || res == LIBUSB_ERROR_TIMEOUT) {
 			if(transferred > 0) {
 				DumpHex("USB TX:\n", tbuf, transferred);
@@ -490,7 +490,7 @@ int lbus_open(lbus_ctx **C) {
 		*C = NULL;
 		return LBUS_LIBUSB_INIT_ERROR;
 	}
-	if(NULL == ((*C)->dev = libusb_open_device_with_vid_pid((*C)->ctx, 0xdeaf, 0xcafe))) {
+	if(NULL == ((*C)->dev = libusb_open_device_with_vid_pid((*C)->ctx, 0xdead, 0xcafe))) {
 		lbus_free(*C);
 		*C = NULL;
 		return LBUS_DEVICE_NOT_FOUND;
