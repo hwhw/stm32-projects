@@ -1,8 +1,13 @@
 local y = -1
 api:effect_add(10, "swoosh", function(t, data)
+	if not data.active then return end
 	y = y + .02
 	local start = math.floor(y)
-	if start >= 6 then return true end
+	if start >= 6 then
+		data.active = nil
+		y = -1
+		return
+	end
 	local s1 = y % 1
 	local s2 = 1.0 - s1
 	if start+1 < 6 then
