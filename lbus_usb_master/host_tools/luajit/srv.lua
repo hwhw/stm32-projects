@@ -5,7 +5,17 @@ local bit = require"bit"
 local S = require "syscall"
 local t, c = S.t, S.c
 -- lbuscomm.lua
-local lbus = require"lbuscomm"
+local lbus
+if arg[1] and arg[1] == "emu" then
+	lbus = {
+		open = function() return {
+			lbus_tx = function() end
+		} end,
+		check = function() end
+	}
+else
+	lbus = require"lbuscomm"
+end
 local lbus_ctx = lbus.open()
 -- some datastructures for busmaster communication and LED data
 ffi.cdef[[
@@ -119,6 +129,8 @@ local poll = {
 	eof = function(ev) return ev.HUP or ev.ERR or ev.RDHUP end,
 }
 
+assert(S.signal("pipe", "ign"))
+
 local ep = poll:init()
 
 -- set up TCP socket to listen on
@@ -149,19 +161,25 @@ local ledapi = {
 }
 
 -- set LED to color
-function ledapi:set(x, y, r, g, b, a)
+function ledapi:set(x, y, r, g, b, a_r, a_g, a_b)
 	assert(x>=0)
 	assert(x<=3)
 	assert(y>=0)
 	assert(y<=5)
-	a = a or 1.0
-	self.ledbuf[x][y].r = self.ledbuf[x][y].r * (1.0-a) + r*a
-	self.ledbuf[x][y].g = self.ledbuf[x][y].g * (1.0-a) + g*a
-	self.ledbuf[x][y].b = self.ledbuf[x][y].b * (1.0-a) + b*a
+	local a_r = a_r or 1.0
+	local a_g = a_g or a_r
+	local a_b = a_b or a_g
+	self.ledbuf[x][y].r = self.ledbuf[x][y].r * (1.0-a_r) + r*a_r
+	self.ledbuf[x][y].g = self.ledbuf[x][y].g * (1.0-a_g) + g*a_g
+	self.ledbuf[x][y].b = self.ledbuf[x][y].b * (1.0-a_b) + b*a_b
 end
 
 -- get LED color
 function ledapi:get(x, y)
+	assert(x>=0)
+	assert(x<=3)
+	assert(y>=0)
+	assert(y<=5)
 	return self.ledbuf[x][y].r, self.ledbuf[x][y].g, self.ledbuf[x][y].b
 end
 
@@ -183,7 +201,7 @@ function ledapi:tick()
 		end
 	end
 	for _, offs in pairs(delete) do
-		table.remove(self.effectstack, offs)
+		self.effectstack[offs] = nil
 	end
 end
 
@@ -219,7 +237,7 @@ function ledapi:effect_del(name)
 			end
 		end
 		if delete then
-			table.remove(self.effectstack, offs)
+			self.effectstack[delete] = nil
 			self.io:write("EFFECT REMOVED\n")
 		end
 	end
