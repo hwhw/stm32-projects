@@ -89,10 +89,10 @@ local function to_le16(dst, src)
 end
 
 -- assert wrapper for proper error messages - about the same as
--- the normal Lua assert, except that does not do the tostring()
--- step
+-- the normal Lua assert, except that the normal one does not do
+-- the tostring() step
 local function assert(cond, s, ...)
-	if cond == nil then error(tostring(s)) end
+	if not cond then error(tostring(s)) end
 	return cond, s, ...
 end
 
