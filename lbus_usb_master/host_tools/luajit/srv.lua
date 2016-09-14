@@ -6,16 +6,27 @@ local S = require "syscall"
 local t, c = S.t, S.c
 -- lbuscomm.lua
 local lbus
-if arg[1] and arg[1] == "emu" then
-	lbus = {
-		open = function() return {
-			lbus_tx = function() end
-		} end,
-		check = function() end
-	}
-else
+local watchdog = function() end
+while #arg > 0 do
+	if arg[1] == "emu" then
+		lbus = {
+			open = function() return {
+				lbus_tx = function() end
+			} end,
+			check = function() end
+		}
+	elseif arg[1] == "systemd" then
+		local sd = require"systemd"
+		watchdog = function()
+			sd.notify(0, "WATCHDOG=1")
+		end
+	end
+	table.remove(arg, 1)
+end
+if not lbus then
 	lbus = require"lbuscomm"
 end
+
 local lbus_ctx = lbus.open()
 -- some datastructures for busmaster communication and LED data
 ffi.cdef[[
@@ -203,6 +214,7 @@ function ledapi:tick()
 	for _, offs in pairs(delete) do
 		self.effectstack[offs] = nil
 	end
+	watchdog()
 end
 
 -- output an effect list
