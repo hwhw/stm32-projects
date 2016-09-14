@@ -7,8 +7,10 @@ local t, c = S.t, S.c
 -- lbuscomm.lua
 local lbus
 local watchdog = function() end
+local initdir
 while #arg > 0 do
 	if arg[1] == "emu" then
+		-- for now, this flag just disables USB interface
 		lbus = {
 			open = function() return {
 				lbus_tx = function() end
@@ -16,9 +18,16 @@ while #arg > 0 do
 			check = function() end
 		}
 	elseif arg[1] == "systemd" then
+		-- for now, this means we send watchdog pings
 		local sd = require"systemd"
 		watchdog = function()
 			sd.notify(0, "WATCHDOG=1")
+		end
+	elseif arg[1] == "initdir" then
+		-- read a bunch of initial effects from a directory
+		if arg[2] then
+			initdir = arg[2]
+			table.remove(arg, 2)
 		end
 	end
 	table.remove(arg, 1)
@@ -388,6 +397,34 @@ function poll()
 				w[ev.fd]:read()
 			end
 		end
+	end
+end
+
+-- load a bunch of default effects if a directory for those
+-- is configured
+if initdir then
+	local dir_ls = S.util.ls(initdir)
+	if dir_ls then
+		ledapi.io = S.stdout
+		for d in dir_ls do
+			if string.match(d, "%.lua$") then
+				local f = io.open(string.format("%s/%s", initdir, d))
+				if f then
+					local code = "local api=...\n" .. f:read("*a")
+					f:close()
+					local fn, err = loadstring(code)
+					if fn == nil then
+						print("error loading file:", d)
+					else
+						local ok, err = pcall(fn, ledapi)
+						if not ok then
+							print("error running file", d, err)
+						end
+					end
+				end
+			end
+		end
+		ledapi.io = nil
 	end
 end
 
