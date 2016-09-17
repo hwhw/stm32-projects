@@ -211,13 +211,12 @@ function ledapi:tick()
 	for offs, effect in pairs(self.effectstack) do
 		local ok, err = pcall(effect.func, tstart, effect.data)
 		local now = S.clock_gettime("MONOTONIC").time
-		local dur = now - start
+		effect.lastdur = now - start
 		start = now
 		if not ok then
 			effect.lasterr = err
 		else
 			if err then table.insert(delete, 1, offs) end
-			effect.lastdur = dur
 		end
 	end
 	for _, offs in pairs(delete) do
@@ -229,9 +228,9 @@ end
 -- output an effect list
 function ledapi:effect_list()
 	if self.io then
-		self.io:write("PRIO\tLOAD\tNAME\tLASTERR\n")
+		self.io:write("PRIO\tLOAD\tNAME\tLASTERR/DEBUG\n")
 		for prio, effect in pairs(self.effectstack) do
-			self.io:write(string.format("%d\t%02.2f%%\t%s\t%s\n", effect.prio, 100*effect.lastdur*50, effect.name, effect.lasterr))
+			self.io:write(string.format("%d\t%02.2f%%\t%s\t%s\n", effect.prio, 100*effect.lastdur*50, effect.name, effect.lasterr or effect.data.debug or "-"))
 		end
 	end
 end
@@ -264,13 +263,25 @@ function ledapi:effect_del(name)
 	end
 end
 
--- return an effect for data manipulation
+-- set effect's data item
 function ledapi:effect_set(name, dataitem, value)
 	for _, effect in pairs(self.effectstack) do
 		if effect.name == name then
 			effect.data[dataitem] = value
+			return
 		end
 	end
+	error("no such effect")
+end
+
+-- retur effect's data item
+function ledapi:effect_get(name, dataitem)
+	for _, effect in pairs(self.effectstack) do
+		if effect.name == name then
+			return effect.data[dataitem]
+		end
+	end
+	error("no such effect")
 end
 
 -- fixed "effect" on the effectstack is the commit, i.e. pushing all the
