@@ -4,3 +4,7 @@
 [submodule "moodlight/setmoodled/luajit/LuaSerialPort"]
 	path = moodlight/setmoodled/luajit/LuaSerialPort
 	url = https://github.com/cbrake/LuaSerialPort.git
+[submodule "ChibiOS"]
+	path = ChibiOS
+	url = https://github.com/ChibiOS/ChibiOS.git
+	branch = stable_16.1.x
