@@ -1,11 +1,17 @@
+// nanosleep(), please:
+#define _POSIX_C_SOURCE 200112L
+
 #include <stdio.h>
 #include <math.h>
-#include <unistd.h>
+//#include <unistd.h>
+#include <time.h>
 #include <stdlib.h>
 #include <string.h>
 #include "usbbb.h"
 
-void output_sensors(uint16_t data[]) {
+void output_sensors(bb_ctx *bb) {
+  uint16_t data[8*12];
+  bb_get_sensordata(bb, data);
   printf("\e[1;1H\e[2J"); /* clear screen */
   for(int r=0; r<8; r++) {
     printf("%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n",
@@ -22,71 +28,6 @@ void output_sensors(uint16_t data[]) {
         data[10*r+10],
         data[10*r+11]);
   }
-}
-
-void get_led_pos(int led, int pos[]) {
-  int x, y;
-  if(led < 160) {
-    // left-right
-    y = 5 + 4 * (led / 20);
-    x = 2 * (led % 20);
-    if(((led / 20) % 2) == 1)
-      x = 38 - x;
-  } else {
-    // down-up
-    led -= 160;
-    x = 5 + 4 * (led / 20);
-    y = 2 * (led % 20);
-    if(((led / 20) % 2) == 0)
-      y = 38 - y;
-  }
-  pos[0] = x;
-  pos[1] = y;
-}
-
-int16_t pos_led[40][40];
-int16_t pos_leds10[10][10][4];
-void init_pos_led() {
-  memset(pos_led, 0xFF, 40*40*sizeof(int16_t));
-  memset(pos_leds10, 0xFF, 10*10*4*sizeof(int16_t));
-  for(int i=0; i<320; i++) {
-    int p[2];
-    get_led_pos(i, p);
-    pos_led[p[1]][p[0]] = i;
-    int16_t *p10 = pos_leds10[p[1]/4][p[0]/4];
-    while(*p10 != -1) p10++;
-    *p10 = i;
-  }
-#ifdef DEBUG
-  for(int y=0; y<40; y++) {
-    for(int x=0; x<40; x++) {
-      printf("%3d, ", pos_led[y][x]);
-    }
-    printf("\n");
-  }
-  for(int y=0; y<10; y++) {
-    for(int i=0; i<4; i++) {
-    for(int x=0; x<10; x++) {
-      printf("%3d, ", pos_leds10[y][x][i]);
-    }
-    printf("\n");
-    }
-  }
-#endif
-}
-
-void set_led10(bb_ctx* bb, const int x, const int y, const int r, const int g, const int b) {
-  for(int i=0; i<4; i++) {
-    int led = pos_leds10[y][x][i];
-    if(led == -1) break;
-    bb_set_led(bb, led, r, g, b);
-  }
-}
-
-void set_led40(bb_ctx* bb, const int x, const int y, const int r, const int g, const int b) {
-  int led = pos_led[y][x];
-  if(led != -1)
-    bb_set_led(bb, led, r, g, b);
 }
 
 void HSL_to_RGB(int hue, int sat, int lum, int* r, int* g, int* b)
@@ -127,7 +68,7 @@ void paint10(bb_ctx* bb) {
     for(int x=0; x<10; x++) {
       int r, g, b;
       HSL_to_RGB((h+x*4+(y/2)) % 256, s, l, &r, &g, &b);
-      set_led10(bb, x, y, r, g, b);
+      bb_set_led10(bb, x, y, r, g, b);
     }
   }
   bb_transmit(bb);
@@ -147,7 +88,7 @@ void paint40(bb_ctx* bb) {
       float hoffs = x*3 + y/2;
 
       HSL_to_RGB((int)floor(h+hoffs) % 256, s, l, &r, &g, &b);
-      set_led40(bb, x, y, r, g, b);
+      bb_set_led40(bb, x, y, r, g, b);
     }
   }
   bb_transmit(bb);
@@ -156,8 +97,8 @@ void paint40(bb_ctx* bb) {
 }
 
 int main(int argc, char* argv[]) {
+  struct timespec tick = { 0, 20*1000*1000 };
   bb_ctx* bb;
-  init_pos_led();
   //exit(0);
   int err = bb_open(&bb);
   if(err) { 
@@ -166,7 +107,7 @@ int main(int argc, char* argv[]) {
   }
   while(1) {
     paint40(bb);
-    //output_sensors(bb->sensors);
-    usleep(20000);
+    //output_sensors(bb);
+    nanosleep(&tick, NULL);
   }
 }
