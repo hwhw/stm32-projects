@@ -135,6 +135,7 @@ static uint16_t measure[12*8];
 static int measure_group = 0;
 static uint8_t ledbuffers[WS2812_LEDS*3*2];
 static int led_active = 0;
+static int led_active_w = 1;
 static volatile bool led_toggle = false;
 static uint8_t ws2812buf[WS2812_BUF_LEN];
 static int nextled = 0;
@@ -207,6 +208,10 @@ void ws2812_fill(uint8_t* buf) {
     chSysLockFromISR();
     adcStartConversionI(&ADCD1, &adcgrpcfg, &measure[measure_state*8], 1);
     chSysUnlockFromISR();
+    if(led_toggle) {
+      led_toggle = false;
+      led_active = 1 - led_active;
+    }
   }
   if(nextled == (WS2812_LEDS_PER_HALFBUF*2)) {
     palClearPad(GPIOB, 0);
@@ -317,11 +322,14 @@ void dataReceived(USBDriver *usbp, usbep_t ep) {
     uint16_t cmd = (usb_buf_rx[0] << 8) | usb_buf_rx[1];
     uint16_t offs = cmd & 0x1FF;
     /* always write to the inactive buffer */
-    //uint8_t* d = ledbuffers + 3 * ((led_active ^ 1)*WS2812_LEDS + offs);
-    uint8_t* d = ledbuffers + 3 * (led_active*WS2812_LEDS + offs);
+    uint8_t* d = ledbuffers + 3 * (led_active_w*WS2812_LEDS + offs);
+    //uint8_t* d = ledbuffers + 3 * (led_active*WS2812_LEDS + offs);
     memcpy(d, usb_buf_rx + 2, osp->rxcnt - 2);
     /* flip buffers */
-    //if(cmd & 0x8000) led_toggle = true;
+    if(cmd & 0x8000) {
+      led_toggle = true;
+      led_active_w = 1 - led_active_w;
+    }
   }
 
   chSysLockFromISR();
