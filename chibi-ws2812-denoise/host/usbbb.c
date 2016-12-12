@@ -31,6 +31,7 @@ struct bb_ctx_s {
   bool running;
   bool dirty;
   bool transmitting;
+  int measure_row;
   int xmit_offs;
   pthread_mutex_t mutex_transmitting;
   pthread_mutex_t mutex_sensordata;
@@ -165,7 +166,7 @@ void LIBUSB_CALL onTransmitComplete(struct libusb_transfer *transfer) {
     C->xmit_fb[3*C->xmit_offs] = C->xmit_offs >> 8;
     if((C->xmit_offs+20) >= LED_COUNT) {
       /* last package will trigger refresh on device side */
-      C->xmit_fb[3*C->xmit_offs] |= 0x80;
+      C->xmit_fb[3*C->xmit_offs] |= (C->measure_row + 1) << 4;
     }
     C->xmit_fb[3*C->xmit_offs+1] = C->xmit_offs & 0xFF;
     int size = (LED_COUNT - C->xmit_offs > 20) ? 20*3 : (LED_COUNT - C->xmit_offs)*3;
@@ -183,7 +184,7 @@ void LIBUSB_CALL onTransmitComplete(struct libusb_transfer *transfer) {
 }
 
 BB_API
-int bb_transmit(bb_ctx *C) {
+int bb_transmit(bb_ctx *C, int measure_row) {
   if(!C->dirty) {
     /* framebuffer wasn't changed */
     return 0;
@@ -210,6 +211,7 @@ int bb_transmit(bb_ctx *C) {
     return -2;
   }
   C->dirty = false;
+  C->measure_row = (measure_row == -1) ? ((C->measure_row + 1)%12) : measure_row;
   C->transmitting = true;
   pthread_mutex_unlock(&C->mutex_transmitting);
   return 0;

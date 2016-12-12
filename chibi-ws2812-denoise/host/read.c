@@ -13,20 +13,16 @@ void output_sensors(bb_ctx *bb) {
   uint16_t data[8*12];
   bb_get_sensordata(bb, data);
   printf("\e[1;1H\e[2J"); /* clear screen */
-  for(int r=0; r<8; r++) {
-    printf("%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n",
-        data[10*r],
-        data[10*r+1],
-        data[10*r+2],
-        data[10*r+3],
-        data[10*r+4],
-        data[10*r+5],
-        data[10*r+6],
-        data[10*r+7],
-        data[10*r+8],
-        data[10*r+9],
-        data[10*r+10],
-        data[10*r+11]);
+  for(int r=0; r<12; r++) {
+    printf("%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n",
+        data[8*r],
+        data[8*r+1],
+        data[8*r+2],
+        data[8*r+3],
+        data[8*r+4],
+        data[8*r+5],
+        data[8*r+6],
+        data[8*r+7]);
   }
 }
 
@@ -71,7 +67,7 @@ void paint10(bb_ctx* bb) {
       bb_set_led10(bb, x, y, r, g, b);
     }
   }
-  bb_transmit(bb);
+  bb_transmit(bb, -1);
   h++;
 }
 void paint40(bb_ctx* bb) {
@@ -85,19 +81,23 @@ void paint40(bb_ctx* bb) {
 
       //float hoffs=cosf(r)*(x-20) - sinf(r)*(y-20);
       //hoffs+=100;
-      float hoffs = x*3 + y/2;
+      float hoffs = 5*sqrtf((x-20)*(x-20) + (y-20)*(y-20));
 
       HSL_to_RGB((int)floor(h+hoffs) % 256, s, l, &r, &g, &b);
+      //r=255;
+      //g=0;
+      //b=0;
       bb_set_led40(bb, x, y, r, g, b);
     }
   }
-  bb_transmit(bb);
-  h+=.5;
+  bb_transmit(bb, -1);
+  h+=.7;
   //r+=.1;
 }
 
 int main(int argc, char* argv[]) {
-  struct timespec tick = { 0, 20*1000*1000 };
+  struct timespec tick = { 0, 200*1000*1000 };
+  int c = 0;
   bb_ctx* bb;
   //exit(0);
   int err = bb_open(&bb);
@@ -107,7 +107,9 @@ int main(int argc, char* argv[]) {
   }
   while(1) {
     paint40(bb);
-    //output_sensors(bb);
+    if(!(c++ % 2)) {
+      output_sensors(bb);
+    }
     nanosleep(&tick, NULL);
   }
 }

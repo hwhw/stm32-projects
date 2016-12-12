@@ -136,7 +136,7 @@ static int measure_group = 0;
 static uint8_t ledbuffers[WS2812_LEDS*3*2];
 static int led_active = 0;
 static int led_active_w = 1;
-static volatile bool led_toggle = false;
+static volatile int led_toggle = 0;
 static uint8_t ws2812buf[WS2812_BUF_LEN];
 static int nextled = 0;
 
@@ -190,7 +190,7 @@ static const ADCConversionGroup adcgrpcfg = {
   ADC_SMPR2_SMP_AN0(ADC_SAMPLE_239P5) | ADC_SMPR2_SMP_AN1(ADC_SAMPLE_239P5) | ADC_SMPR2_SMP_AN2(ADC_SAMPLE_239P5) | ADC_SMPR2_SMP_AN3(ADC_SAMPLE_239P5) |
     ADC_SMPR2_SMP_AN4(ADC_SAMPLE_239P5) | ADC_SMPR2_SMP_AN5(ADC_SAMPLE_239P5) | ADC_SMPR2_SMP_AN6(ADC_SAMPLE_239P5) | ADC_SMPR2_SMP_AN7(ADC_SAMPLE_239P5),
   ADC_SQR1_NUM_CH(8),
-#if 0
+#if 1
   ADC_SQR2_SQ8_N(ADC_CHANNEL_IN7) | ADC_SQR2_SQ7_N(ADC_CHANNEL_IN6), ADC_SQR3_SQ6_N(ADC_CHANNEL_IN5) | ADC_SQR3_SQ5_N(ADC_CHANNEL_IN4) |
   ADC_SQR3_SQ4_N(ADC_CHANNEL_IN3) | ADC_SQR3_SQ3_N(ADC_CHANNEL_IN2) | ADC_SQR3_SQ2_N(ADC_CHANNEL_IN1) | ADC_SQR3_SQ1_N(ADC_CHANNEL_IN0) 
 #else
@@ -208,10 +208,6 @@ void ws2812_fill(uint8_t* buf) {
     chSysLockFromISR();
     adcStartConversionI(&ADCD1, &adcgrpcfg, &measure[measure_state*8], 1);
     chSysUnlockFromISR();
-    if(led_toggle) {
-      led_toggle = false;
-      led_active = 1 - led_active;
-    }
   }
   if(nextled == (WS2812_LEDS_PER_HALFBUF*2)) {
     palClearPad(GPIOB, 0);
@@ -259,10 +255,15 @@ void ws2812_fill(uint8_t* buf) {
       measure_group = measure_state;
 
       nextled = 0;
-
-      measure_state += 1;
-      if(measure_state == 12) {
-        measure_state = 0;
+      if(led_toggle > 0) {
+        led_active = 1 - led_active;
+        measure_state = led_toggle - 1;
+        led_toggle = 0;
+      } else {
+        measure_state += 1;
+        if(measure_state == 12) {
+          measure_state = 0;
+        }
       }
     }
   }
@@ -307,7 +308,6 @@ void run_ws2812(void) {
   WS2812_PWMD.tim->DIER |= STM32_TIM_DIER_CC1DE<<WS2812_PWM_CH;
 }
 
-
 /*===========================================================================*/
 /* Generic code.                                                             */
 /*===========================================================================*/
@@ -323,11 +323,10 @@ void dataReceived(USBDriver *usbp, usbep_t ep) {
     uint16_t offs = cmd & 0x1FF;
     /* always write to the inactive buffer */
     uint8_t* d = ledbuffers + 3 * (led_active_w*WS2812_LEDS + offs);
-    //uint8_t* d = ledbuffers + 3 * (led_active*WS2812_LEDS + offs);
     memcpy(d, usb_buf_rx + 2, osp->rxcnt - 2);
     /* flip buffers */
-    if(cmd & 0x8000) {
-      led_toggle = true;
+    if(cmd & 0xF000) {
+      led_toggle = cmd >> 12;
       led_active_w = 1 - led_active_w;
     }
   }
@@ -337,23 +336,6 @@ void dataReceived(USBDriver *usbp, usbep_t ep) {
     usbStartReceiveI(usbp, EP_OUT, usb_buf_rx, 64);
   }
   chSysUnlockFromISR();
-}
-
-/*
- * Blinker thread, times are in milliseconds.
- */
-static THD_WORKING_AREA(waThread1, 128);
-static __attribute__((noreturn)) THD_FUNCTION(Thread1, arg) {
-
-  (void)arg;
-  chRegSetThreadName("blinker");
-  while (true) {
-    systime_t time = /*serusbcfg.usbp->state == USB_ACTIVE ? 250 :*/ 500;
-    palClearPad(GPIOC, GPIOC_LED);
-    chThdSleepMilliseconds(time);
-    palSetPad(GPIOC, GPIOC_LED);
-    chThdSleepMilliseconds(time);
-  }
 }
 
 int main(void) {
@@ -386,8 +368,6 @@ int main(void) {
 
   /* USB interface */
   usbStart(&USBD1, &usbcfg);
-
-  //chThdCreateStatic(waThread1, sizeof(waThread1), NORMALPRIO, Thread1, NULL);
 
   run_ws2812();
 

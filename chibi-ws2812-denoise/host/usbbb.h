@@ -45,11 +45,13 @@ void bb_set_led10(bb_ctx* C, const int x, const int y, const int r, const int g,
  */
 void bb_set_led40(bb_ctx* C, const int x, const int y, const int r, const int g, const int b);
 /* send all changed data to the device
+ * measure_row is a number 0..11 and specifies the sensor row to check as soon as the
+ * changed data has become active; set to -1 to just iterate through all values
  * returns 0 when a transmit was successfully started
  * returns 1 when a transmit was already in flight. No new transmit is triggered in that case.
  * returns a value <0 upon error
  */
-int bb_transmit(bb_ctx *C);
+int bb_transmit(bb_ctx *C, int measure_row);
 
 /* fill a 12x8 size array with the current sensor state */
 void bb_get_sensordata(bb_ctx *C, uint16_t sensordata[]);
