@@ -29,7 +29,6 @@ struct bb_ctx_s {
   uint16_t sensors[SENSOR_COLS*SENSOR_ROWS];
 
   bool running;
-  bool dirty;
   bool transmitting;
   int measure_row;
   int xmit_offs;
@@ -190,10 +189,6 @@ void LIBUSB_CALL onTransmitComplete(struct libusb_transfer *transfer) {
 
 BB_API
 int bb_transmit(bb_ctx *C, int measure_row) {
-  if(!C->dirty) {
-    /* framebuffer wasn't changed */
-    return 0;
-  }
   pthread_mutex_lock(&C->mutex_transmitting);
   if(C->transmitting) {
     /* transmit in progress, return error */
@@ -215,7 +210,6 @@ int bb_transmit(bb_ctx *C, int measure_row) {
     pthread_mutex_unlock(&C->mutex_transmitting);
     return -2;
   }
-  C->dirty = false;
   C->measure_row = (measure_row == -1) ? ((C->measure_row + 1)%12) : measure_row;
   C->transmitting = true;
   pthread_mutex_unlock(&C->mutex_transmitting);
@@ -246,7 +240,6 @@ void bb_set_led(bb_ctx *C, const int led, const uint8_t r, const uint8_t g, cons
   *p++ = g;
   *p++ = r;
   *p = b;
-  C->dirty = true;
 }
 
 BB_API
