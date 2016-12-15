@@ -33,8 +33,10 @@ struct bb_ctx_s {
   bool transmitting;
   int measure_row;
   int xmit_offs;
+  int sensor_last_row;
   pthread_mutex_t mutex_transmitting;
-  pthread_mutex_t mutex_sensordata;
+  pthread_mutex_t mutex_wait_sensor;
+  pthread_cond_t cond_wait_sensor;
 
   uint8_t rbuf[1+SENSOR_ROWS*sizeof(uint16_t)];
 
@@ -48,11 +50,13 @@ void LIBUSB_CALL onReceiveComplete(struct libusb_transfer *transfer) {
   bb_ctx *C = (bb_ctx *) transfer->user_data;
   if(transfer->status == LIBUSB_TRANSFER_COMPLETED) {
     if(C->rbuf[0] < SENSOR_COLS) {
+      pthread_mutex_lock(&C->mutex_wait_sensor);
+      C->sensor_last_row = C->rbuf[0];
       int offs = C->rbuf[0]*SENSOR_ROWS;
-      pthread_mutex_lock(&C->mutex_sensordata);
       for(int i=0; i<SENSOR_ROWS; i++)
         C->sensors[offs+i] = (C->rbuf[i*2+2] << 8) | (C->rbuf[i*2+1]);
-      pthread_mutex_unlock(&C->mutex_sensordata);
+      pthread_cond_signal(&C->cond_wait_sensor);
+      pthread_mutex_unlock(&C->mutex_wait_sensor);
     }
   }
   if(C->running) {
@@ -65,9 +69,9 @@ void LIBUSB_CALL onReceiveComplete(struct libusb_transfer *transfer) {
 
 BB_API
 void bb_get_sensordata(bb_ctx *C, uint16_t sensordata[]) {
-  pthread_mutex_lock(&C->mutex_sensordata);
+  pthread_mutex_lock(&C->mutex_wait_sensor);
   memcpy(sensordata, C->sensors, sizeof(uint16_t)*SENSOR_COLS*SENSOR_ROWS);
-  pthread_mutex_unlock(&C->mutex_sensordata);
+  pthread_mutex_unlock(&C->mutex_wait_sensor);
 }
 
 void* bb_event_thread(void *d) {
@@ -123,7 +127,8 @@ int bb_open(bb_ctx **C) {
 		return BB_INTERFACE_NOT_AVAILABLE;
 	}
 
-  pthread_mutex_init(&(*C)->mutex_sensordata, NULL);
+  pthread_mutex_init(&(*C)->mutex_wait_sensor, NULL);
+  pthread_cond_init(&(*C)->cond_wait_sensor, NULL);
   pthread_mutex_init(&(*C)->mutex_transmitting, NULL);
 
   bb_init_pos_led(*C);
@@ -146,7 +151,7 @@ void bb_free(bb_ctx* C) {
       pthread_join(C->event_thread, &status);
       (void)status;
       pthread_mutex_destroy(&C->mutex_transmitting);
-      pthread_mutex_destroy(&C->mutex_sensordata);
+      pthread_mutex_destroy(&C->mutex_wait_sensor);
     }
 		if(C->dev != NULL) {
 			libusb_release_interface(C->dev, 0);
@@ -258,4 +263,13 @@ void bb_set_led40(bb_ctx* C, const int x, const int y, const int r, const int g,
   int led = C->pos_led[y][x];
   if(led != -1)
     bb_set_led(C, led, r, g, b);
+}
+
+BB_API
+int bb_wait_measure(bb_ctx* C) {
+  pthread_mutex_lock(&C->mutex_wait_sensor);
+  pthread_cond_wait(&C->cond_wait_sensor, &C->mutex_wait_sensor);
+  int r = C->sensor_last_row;
+  pthread_mutex_unlock(&C->mutex_wait_sensor);
+  return r;
 }

@@ -53,6 +53,11 @@ void bb_set_led40(bb_ctx* C, const int x, const int y, const int r, const int g,
  */
 int bb_transmit(bb_ctx *C, int measure_row);
 
+/* wait for a row of sensor data
+ * returns the row number of freshly received data
+ */
+int bb_wait_measure(bb_ctx* C);
+
 /* fill a 12x8 size array with the current sensor state */
 void bb_get_sensordata(bb_ctx *C, uint16_t sensordata[]);
 #endif
