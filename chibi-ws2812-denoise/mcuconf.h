@@ -60,8 +60,8 @@
  * ADC driver system settings.
  */
 #define STM32_ADC_USE_ADC1                  TRUE
-#define STM32_ADC_ADC1_DMA_PRIORITY         2
-#define STM32_ADC_ADC1_IRQ_PRIORITY         6
+#define STM32_ADC_ADC1_DMA_PRIORITY         0
+#define STM32_ADC_ADC1_IRQ_PRIORITY         15
 
 /*
  * CAN driver system settings.
@@ -141,7 +141,7 @@
 #define STM32_PWM_TIM1_IRQ_PRIORITY         7
 #define STM32_PWM_TIM2_IRQ_PRIORITY         7
 #define STM32_PWM_TIM3_IRQ_PRIORITY         7
-#define STM32_PWM_TIM4_IRQ_PRIORITY         7
+#define STM32_PWM_TIM4_IRQ_PRIORITY         0
 #define STM32_PWM_TIM5_IRQ_PRIORITY         7
 #define STM32_PWM_TIM8_IRQ_PRIORITY         7
 
