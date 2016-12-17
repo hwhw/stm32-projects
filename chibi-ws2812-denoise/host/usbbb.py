@@ -102,7 +102,7 @@ class BB:
         return lib.bb_set_led40(self.bb[0], x, y, r, g, b)
 
     def transmit(self, measure_x):
-        assert measure_x >= 0
+        assert measure_x >= -1
         assert measure_x < 12
         return lib.bb_transmit(self.bb[0], measure_x)
 
