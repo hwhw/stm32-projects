@@ -1,3 +1,4 @@
+import os
 from cffi import FFI
 ffi = FFI()
 ffi.cdef("""
@@ -42,7 +43,7 @@ int bb_wait_measure(bb_ctx* C);
 /* fill a 12x8 size array with the current sensor state */
 void bb_get_sensordata(bb_ctx *C, uint16_t sensordata[]);
 """)
-lib = ffi.dlopen("./libusbbb.so")
+lib = ffi.dlopen("./libusbbb-emu.so") if ("BBEMU" in os.environ) else ffi.dlopen("./libusbbb.so")
 
 class BB:
     """BlackBox hardware access library"""
