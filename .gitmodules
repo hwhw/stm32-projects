@@ -8,3 +8,9 @@
 	path = ChibiOS
 	url = https://github.com/ChibiOS/ChibiOS.git
 	branch = stable_16.1.x
+[submodule "chibi-mpu6050/MPU6050-ChibiOS"]
+	path = chibi-mpu6050/MPU6050-ChibiOS
+	url = https://github.com/jevermeister/MPU6050-ChibiOS.git
+[submodule "chibi-ws2812-denoise/host"]
+	path = chibi-ws2812-denoise/host
+	url = git@github.com:hwhw/usbbb-host.git
