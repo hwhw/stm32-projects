@@ -1,6 +1,6 @@
 CC:=$(ARCH)gcc
 
-all: read libusbbb.so libusbbb-emu.so
+all: libusbbb.so libusbbb-emu.so
 
 clean:
 	rm -f *.o *.so read

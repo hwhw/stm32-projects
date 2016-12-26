@@ -16,10 +16,19 @@
 // set it to the number of milliseconds per frame.
 #define TIME_PER_FRAME 12
 
+#define M_OVER (1<<31)
+#define S_RGB_MASK 0x00FFFFFF
+#define S_RGB_RED(x) ((x>>16)&0xFF)
+#define S_RGB_GREEN(x) ((x>>8)&0xFF)
+#define S_RGB_BLUE(x) (x&0xFF)
+
 struct bb_ctx_s {
   SDL_Thread *event_thread;
   SDL_Window *window;
   SDL_Renderer *renderer;
+  uint32_t sensorstate[SENSOR_COLS*SENSOR_ROWS];
+  uint32_t chipstate[4];
+  uint8_t chipcolor[3];
 
   uint8_t fb[LED_COUNT*3];
   uint8_t xmit_fb[LED_COUNT*3];
@@ -49,6 +58,188 @@ void bb_get_sensordata(bb_ctx *C, uint16_t sensordata[]) {
   SDL_UnlockMutex(C->mutex_wait_sensor);
 }
 
+static SDL_Rect* rect_led(int led, SDL_Rect* r) {
+  int offs = led % 40;
+  if(led < 160) {
+    /* rows in X-direction */
+    r->w = 28;
+    r->h = 56;
+    if(offs >= 20) {
+      offs = 19 - (offs - 20);
+    }
+    /* don't ask me, I'm just working here: */
+    r->x = 20 + 2 + offs*30 - 2*(offs%2);
+    r->y = 20 + 62 + (led / 20)*60;
+  } else {
+    /* columns in Y-direction */
+    r->w = 56;
+    r->h = 28;
+    if(offs >= 20) {
+      offs = 19 - (offs - 20);
+    }
+    r->y = 20 + 572 - (2 + offs*30 - 2*(offs%2));
+    r->x = 20 + 62 + ((led-160) / 20)*60;
+  }
+  return r;
+}
+
+static SDL_Rect* rect_sensor(int sensor, SDL_Rect* r, int border) {
+  if(sensor < 64) {
+    r->w = 56+border*2;
+    r->h = 56+border*2;
+    int x=sensor/8;
+    int y=7-(sensor % 8);
+    r->x = 82 - border + x*60;
+    r->y = 82 - border + y*60;
+  } else if(sensor < 72) {
+    r->w = 16+border*2;
+    r->h = 56+border*2;
+    r->y = 82-border + (sensor-64)*60;
+    r->x = 621-border;
+  } else if(sensor < 80) {
+    r->w = 56+border*2;
+    r->h = 16+border*2;
+    r->x = 82-border + (sensor-72)*60;
+    r->y = 2-border;
+  } else if(sensor < 88) {
+    r->w = 16+border*2;
+    r->h = 56+border*2;
+    r->y = 82-border + (sensor-80)*60;
+    r->x = 2-border;
+  } else if(sensor < 96) {
+    r->w = 56+border*2;
+    r->h = 16+border*2;
+    r->x = 82-border + (sensor-88)*60;
+    r->y = 621-border;
+  }
+  return r;
+}
+
+static int sensor_pos(int x, int y) {
+  int sensor = -1;
+  if(x < 20 && y >= (20+60) && y < (20+540)) {
+    // sensors left
+    sensor = 80 + (y-(20+60))/60;
+  } else if(x >= 620 && y >= (20+60) && y < (20+540)) {
+    // sensors right
+    sensor = 64 + (y-(20+60))/60;
+  } else if(y < 20 && x >= (20+60) && x < (20+540)) {
+    // sensors top
+    sensor = 72 + (x-(20+60))/60;
+  } else if(y >= 620 && x >= (20+60) && x < (20+540)) {
+    // sensors bottom
+    sensor = 88 + (x-(20+60))/60;
+  } else if(x >= 80 && x < 560 && y >= 80 && y < 560) {
+    // 8x8 sensor fields
+    sensor = ((x-(20+60))/60) * 8 + (7-(y-(20+60))/60);
+  }
+  return sensor;
+}
+
+static SDL_Rect* rect_chip(int chip, SDL_Rect* r, int border) {
+  r->w = 25+2*border;
+  r->h = 25+2*border;
+  switch(chip) {
+    case 0:
+      r->x = 5-border;
+      r->y = 5-border;
+      break;
+    case 1:
+      r->x = 5-border;
+      r->y = 34-border;
+      break;
+    case 2:
+      r->x = 34-border;
+      r->y = 5-border;
+      break;
+    case 3:
+      r->x = 34-border;
+      r->y = 34-border;
+      break;
+  }
+  return r;
+}
+
+static int chip_pos(int x, int y) {
+  if(x >=5 && x < 30 && y >= 5 && y < 30) {
+    return 0;
+  } else if(x >=5 && x < 30 && y >= 34 && y < 59) {
+    return 1;
+  } else if(x >= 34 && x < 59 && y >= 5 && y < 30) {
+    return 2;
+  } else if(x >= 34 && x < 59 && y >= 34 && y < 59) {
+    return 3;
+  }
+  return -1;
+}
+
+static void render(bb_ctx *C) {
+  SDL_SetRenderDrawBlendMode(C->renderer, SDL_BLENDMODE_BLEND);
+  SDL_SetRenderDrawColor(C->renderer, 0, 0, 0, 255);
+  SDL_RenderClear(C->renderer);
+  SDL_Rect r;
+
+  /* paint fields */
+  uint8_t *c = C->xmit_fb;
+  for(int i=0; i<320; i++) {
+    int offs = i % 20;
+    if(offs < 2 || offs > 17) {
+      /* side fields are a bit darker */
+      SDL_SetRenderDrawColor(C->renderer, *c++, *c++, *c++, 200);
+    } else {
+      SDL_SetRenderDrawColor(C->renderer, *c++, *c++, *c++, (i<160) ? 255 : 128);
+    }
+    SDL_RenderFillRect(C->renderer, rect_led(i, &r));
+  }
+  /* paint sensor markers */
+  for(int i=0; i<96; i++) {
+    uint32_t v = C->sensorstate[i];
+    if(v & M_OVER) {
+      if(i<64) {
+        SDL_SetRenderDrawColor(C->renderer, C->chipcolor[0], C->chipcolor[1], C->chipcolor[2], 255);
+      } else {
+        SDL_SetRenderDrawColor(C->renderer, 255, 255, 255, 255);
+      }
+      SDL_RenderDrawRect(C->renderer, rect_sensor(i, &r, 1));
+      SDL_RenderDrawRect(C->renderer, rect_sensor(i, &r, 2));
+    }
+    if(v & S_RGB_MASK) {
+      if(i<64) {
+        SDL_SetRenderDrawColor(C->renderer, S_RGB_RED(v), S_RGB_GREEN(v), S_RGB_BLUE(v), 255);
+        SDL_RenderFillRect(C->renderer, rect_sensor(i, &r, -11));
+        SDL_SetRenderDrawColor(C->renderer, 0, 0, 0, 255);
+        SDL_RenderDrawRect(C->renderer, rect_sensor(i, &r, -10));
+      } else {
+        SDL_SetRenderDrawColor(C->renderer, 255, 255, 255, 255);
+        SDL_RenderFillRect(C->renderer, rect_sensor(i, &r, 0));
+      }
+    }
+  }
+  /* paint chip markers */
+  for(int i=0; i<4; i++) {
+    switch(i) {
+      case 0:
+        SDL_SetRenderDrawColor(C->renderer, 200, 0, 0, 255);
+        break;
+      case 1:
+        SDL_SetRenderDrawColor(C->renderer, 0, 200, 0, 255);
+        break;
+      case 2:
+        SDL_SetRenderDrawColor(C->renderer, 0, 0, 200, 255);
+        break;
+      case 3:
+        SDL_SetRenderDrawColor(C->renderer, 150, 0, 150, 255);
+        break;
+    }
+    SDL_RenderFillRect(C->renderer, rect_chip(i, &r, 0));
+    if(C->chipstate[i] & M_OVER) {
+      SDL_SetRenderDrawColor(C->renderer, 255, 255, 255, 255);
+      SDL_RenderDrawRect(C->renderer, rect_chip(i, &r, 1));
+    }
+  }
+  SDL_RenderPresent(C->renderer);
+}
+
 static int bb_event_thread(void *d) {
   SDL_Event event;
   bb_ctx *C = (bb_ctx*)d;
@@ -69,69 +260,95 @@ static int bb_event_thread(void *d) {
   while(C->running) {
     int now = SDL_GetTicks();
     int wait = (next - now);
-    if(wait < 0) {
-      next += C->ms_per_frame;
-      continue;
-    }
-    if(!SDL_WaitEventTimeout(&event, wait)) {
+    if(wait <= 0 || !SDL_WaitEventTimeout(&event, wait)) {
       next += C->ms_per_frame;
       SDL_LockMutex(C->mutex_transmitting);
       if(C->xmit) {
         C->xmit = false;
-        SDL_SetRenderDrawBlendMode(C->renderer, SDL_BLENDMODE_BLEND);
-        SDL_SetRenderDrawColor(C->renderer, 0, 0, 0, 255);
-        SDL_RenderClear(C->renderer);
-        SDL_Rect r;
-        r.w = 28;
-        r.h = 56;
-        uint8_t *c = C->xmit_fb;
-        for(int i=0; i<160; i++) {
-          int offs = i % 40;
-          if(offs >= 20) {
-            offs = 19 - (offs - 20);
-          }
-          r.x = 20 + 2 + offs*30 - 2*(offs%2);
-          r.y = 20 + 62 + (i / 20)*60;
-
-          if(offs < 2 || offs > 17) {
-            SDL_SetRenderDrawColor(C->renderer, *c++, *c++, *c++, 200);
-          } else {
-            SDL_SetRenderDrawColor(C->renderer, *c++, *c++, *c++, 255);
-          }
-          SDL_RenderFillRect(C->renderer, &r);
-        }
-        r.w = 56;
-        r.h = 28;
-        for(int i=0; i<160; i++) {
-          int offs = i % 40;
-          if(offs >= 20) {
-            offs = 19 - (offs - 20);
-          }
-          r.y = 20 + 571 - (2 + offs*30 - 2*(offs%2));
-          r.x = 20 + 62 + (i / 20)*60;
-
-          if(offs < 2 || offs > 17) {
-            SDL_SetRenderDrawColor(C->renderer, *c++, *c++, *c++, 200);
-          } else {
-            SDL_SetRenderDrawColor(C->renderer, *c++, *c++, *c++, 128);
-          }
-          SDL_RenderFillRect(C->renderer, &r);
-        }
-        SDL_RenderPresent(C->renderer);
+        render(C);
       }
       
       SDL_LockMutex(C->mutex_wait_sensor);
 
-      for(int i=0; i<SENSOR_ROWS; i++)
-        C->sensors[C->measure_row * SENSOR_ROWS + i] = 100+(random()%120);
+      for(int i=0; i<SENSOR_ROWS; i++) {
+        int s = C->measure_row * SENSOR_ROWS + i;
+        if(C->sensorstate[s] & S_RGB_MASK) {
+          // TODO: set sensor state according to LED and chip color
+        } else {
+          int level = 100; // TODO: make this dependent on LED color (leakage)
+          C->sensors[s] = level+(random()%120);
+        }
+      }
 
       SDL_CondSignal(C->cond_wait_sensor);
       SDL_UnlockMutex(C->mutex_wait_sensor);
 
       SDL_UnlockMutex(C->mutex_transmitting);
     } else {
-      if(event.type == SDL_QUIT) {
-        SDL_Quit();
+      if(event.type == SDL_MOUSEMOTION) {
+        int mx = event.motion.x;
+        int my = event.motion.y;
+        int p = sensor_pos(mx, my);
+        if(p != -1) {
+          for(int i=0; i<96; i++) C->sensorstate[i] &= ~(M_OVER);
+          C->sensorstate[p] |= M_OVER;
+        }
+      } else if(event.type == SDL_MOUSEBUTTONDOWN) {
+        int mx = event.button.x;
+        int my = event.button.y;
+        int p = sensor_pos(mx, my);
+        if(p != -1) {
+          switch(event.button.button) {
+            case SDL_BUTTON_LEFT:
+              C->sensorstate[p] |= (C->chipcolor[0] << 16) | (C->chipcolor[1] << 8) | C->chipcolor[2];
+              break;
+            case SDL_BUTTON_RIGHT:
+              if(C->sensorstate[p] & S_RGB_MASK) {
+                C->sensorstate[p] &= ~(S_RGB_MASK);
+              } else {
+                C->sensorstate[p] |= (C->chipcolor[0] << 16) | (C->chipcolor[1] << 8) | C->chipcolor[2];
+              }
+              break;
+          }
+        }
+        p = chip_pos(mx, my);
+        if(p != -1) {
+          for(int i=0; i<4; i++) C->chipstate[i] &= ~(M_OVER);
+          C->chipstate[p] |= M_OVER;
+          switch(p) {
+            case 0:
+              C->chipcolor[0] = 255;
+              C->chipcolor[1] = 0;
+              C->chipcolor[2] = 0;
+              break;
+            case 1:
+              C->chipcolor[0] = 0;
+              C->chipcolor[1] = 255;
+              C->chipcolor[2] = 0;
+              break;
+            case 2:
+              C->chipcolor[0] = 0;
+              C->chipcolor[1] = 0;
+              C->chipcolor[2] = 255;
+              break;
+            case 3:
+              C->chipcolor[0] = 200;
+              C->chipcolor[1] = 0;
+              C->chipcolor[2] = 200;
+              break;
+          }
+        }
+      } else if(event.type == SDL_MOUSEBUTTONUP) {
+        int mx = event.button.x;
+        int my = event.button.y;
+        int p = sensor_pos(mx, my);
+        if(p != -1) {
+          switch(event.button.button) {
+            case SDL_BUTTON_LEFT:
+              C->sensorstate[p] &= ~(S_RGB_MASK);
+              break;
+          }
+        }
       }
     }
   }
@@ -169,6 +386,7 @@ int bb_open(bb_ctx **C) {
 		return BB_MEMORY_ERROR;
 
   bb_init_pos_led(*C);
+  (*C)->chipcolor[0] = 255;
 
   char *bbemu = getenv("BBEMU");
   if(bbemu == NULL) {
