@@ -5,12 +5,12 @@ StartLimitIntervalSec=0
 [Service]
 Type=simple
 WorkingDirectory=/home/pi/source/usb_master_host_tools/luajit
-User=nobody
-Group=nogroup
-ExecStart=/usr/bin/luajit srv.lua systemd
+User=root
+Group=root
+ExecStart=/usr/bin/luajit srv.lua initdir /home/pi/effects.d
 RestartSec=2
-WatchdogSec=5
+#WatchdogSec=5
 Restart=always
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
