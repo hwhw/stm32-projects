@@ -88,6 +88,7 @@ struct lbus_pkg {
 		struct lbus_SET_ADDRESS SET_ADDRESS;
 		struct lbus_READ_MEMORY READ_MEMORY;
 		struct lbus_FLASH_FIRMWARE FLASH_FIRMWARE;
+		struct lbus_SET_POLARITY SET_POLARITY;
 	};
 } __packed;
 

@@ -129,6 +129,14 @@ int lbus_get_config(lbus_ctx* C, const int dst, const uint16_t type, const bool 
  * \return >=0 if successful, error code otherwise
  */
 int lbus_set_address(lbus_ctx* C, const int dst, const uint8_t address);
+/* configure slave's LED PWM polarity
+ *
+ * \param C lbus_ctx pointer
+ * \param dst destination to send message to
+ * \param polarity new polarity to configure for slave device
+ * \return >=0 if successful, error code otherwise
+ */
+int lbus_set_polarity(lbus_ctx* C, const int dst, const uint8_t polarity);
 /* read from slave's memory
  *
  * \param C lbus_ctx pointer

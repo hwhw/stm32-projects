@@ -315,6 +315,24 @@ int lbus_set_address(lbus_ctx* C, const int dst, const uint8_t address) {
 }
 
 LBUS_API
+int lbus_set_polarity(lbus_ctx* C, const int dst, const uint8_t polarity) {
+	struct lbus_pkg pkg = {
+		.hdr = {
+			.length = tole16(sizeof(struct lbus_hdr)+sizeof(struct lbus_SET_POLARITY)+1),
+			.addr = dst,
+			.cmd = SET_POLARITY,
+		},
+		.SET_POLARITY = {
+			.polarity = polarity
+		}
+	};
+	int ret = lbus_tx(C, &pkg, sizeof(pkg));
+	if(ret < 0) return ret;
+
+	return lbus_simple_recv(C, 1, NULL);
+}
+
+LBUS_API
 int lbus_read_memory(lbus_ctx* C, const int dst, const uint32_t address, const int length, void *buf) {
 	if(length < 0 || length > 1024) {
 		return LBUS_MISUSE_ERROR;

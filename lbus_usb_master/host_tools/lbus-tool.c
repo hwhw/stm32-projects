@@ -83,6 +83,9 @@ int main(int argc, char* argv[]) {
 				} else if(!strcasecmp("address", argv[optind])) {
 					int reply = test_error(lbus_get_config(C, dst, LBUS_DATA_ADDRESS, true, 1, NULL));
 					printf("%d\n", reply);
+				} else if(!strcasecmp("polarity", argv[optind])) {
+					int reply = test_error(lbus_get_config(C, dst, LBUS_DATA_POLARITY, true, 1, NULL));
+					printf("%d\n", reply);
 				} else if(!strcasecmp("firmware_version", argv[optind])) {
 					uint32_t version = 0;
 					test_error(lbus_get_config(C, dst, LBUS_DATA_FIRMWARE_VERSION, true, 4, &version));
@@ -130,6 +133,14 @@ int main(int argc, char* argv[]) {
 			}
 			int address = strtol(argv[optind++], NULL, 0);
 			test_error(lbus_set_address(C, dst, address));
+			fprintf(stderr, "success\n");
+		} else if(!strcasecmp("set_polarity", cmd)) {
+			if(optind >= argc) {
+				fprintf(stderr, "usage: ... %s <polarity>\n", cmd);
+				goto error;
+			}
+			int polarity = strtol(argv[optind++], NULL, 0);
+			test_error(lbus_set_polarity(C, dst, polarity));
 			fprintf(stderr, "success\n");
 		} else if(!strcasecmp("read_memory", cmd)) {
 			if(optind + 1 >= argc) {
