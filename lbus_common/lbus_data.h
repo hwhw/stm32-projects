@@ -15,6 +15,7 @@ enum lbus_cmd {
 	LED_SET_16BIT = 10,
 	LED_COMMIT,
 	LED_SET_8BIT,
+  SET_POLARITY,
 	RESET_TO_BOOTLOADER = 122,
 	ERASE_CONFIG,
 	SET_ADDRESS,
@@ -34,7 +35,8 @@ enum lbus_data {
 	LBUS_DATA_FIRMWARE_VERSION,
 	LBUS_DATA_BOOTLOADER_VERSION,
 	LBUS_DATA_FIRMWARE_NAME_LENGTH,
-	LBUS_DATA_FIRMWARE_NAME
+	LBUS_DATA_FIRMWARE_NAME,
+  LBUS_DATA_POLARITY
 };
 
 struct lbus_hdr {
@@ -57,6 +59,10 @@ struct lbus_LED_SET_16BIT {
 struct lbus_LED_SET_8BIT {
 	uint16_t led;
 	uint8_t color[];
+} __packed;
+
+struct lbus_SET_POLARITY {
+	uint8_t polarity;
 } __packed;
 
 struct lbus_SET_ADDRESS {

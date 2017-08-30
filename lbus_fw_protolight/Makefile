@@ -3,7 +3,7 @@ OBJS = ../lbus_common/lbus.o ../lbus_common/config.o
 
 LDSCRIPT = ../lbus_common/stm32firmware.ld
 VERSION = $(shell git rev-parse --short=8 HEAD)
-CFLAGS += -fms-extensions -DVERSION=0x$(VERSION) -I../lbus_common
+CFLAGS += -fms-extensions -DVERSION=0x$(VERSION) -I../lbus_common -std=c11
 
 all: firmware.bin
 

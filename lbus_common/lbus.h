@@ -33,7 +33,7 @@
 void lbus_init(void);
 void lbus_send(const uint8_t txbyte);
 void lbus_send_buf(const void *buf, const int length);
-inline void lbus_send32(const uint32_t *txwordptr) { lbus_send_buf(txwordptr, 4); }
+static inline void lbus_send32(const uint32_t *txwordptr) { lbus_send_buf(txwordptr, 4); }
 void lbus_start_tx(void);
 void lbus_end_pkg(void);
 void lbus_reset_to_bootloader(void);

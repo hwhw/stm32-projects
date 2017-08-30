@@ -9,6 +9,7 @@ enum config_type {
 	/* config for PWM LEDs: */
 	CONFIG_LED_GROUP = 0x00010000,
 	CONFIG_LED_LUT8TO16 = 0x00011000, /* reserved up to 0x000110FF */
+  CONFIG_LED_POLARITY = 0x00011100,
 
 	/* 0xFFFFFFFF will be the value present after the config space has
 	 * been erased, so it is reserved here

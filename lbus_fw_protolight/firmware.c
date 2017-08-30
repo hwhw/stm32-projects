@@ -65,16 +65,20 @@ static void clock_setup(void)
 // 16bit @ 100 Hz
 #define PWM_FREQ 100
 
-static void oc_setup(uint32_t timer, uint32_t oc) {
+static void oc_setup(uint32_t timer, uint32_t oc, int polarity_high) {
 	timer_disable_oc_output(timer, oc);
 	timer_set_oc_mode(timer, oc, TIM_OCM_PWM1);
 	timer_disable_oc_clear(timer, oc);
 	timer_set_oc_value(timer, oc, 0);
 	timer_enable_oc_preload(timer, oc);
-	timer_set_oc_polarity_low(timer, oc);
+  if(polarity_high) {
+    timer_set_oc_polarity_high(timer, oc);
+  } else {
+    timer_set_oc_polarity_low(timer, oc);
+  }
 	timer_enable_oc_output(timer, oc);
 }
-static void timer_setup(uint32_t timer) {
+static void timer_setup(uint32_t timer, int polarity) {
 	timer_reset(timer);
 
 	timer_set_mode(timer, TIM_CR1_CKD_CK_INT, TIM_CR1_CMS_EDGE, TIM_CR1_DIR_UP);
@@ -82,14 +86,15 @@ static void timer_setup(uint32_t timer) {
 	timer_continuous_mode(timer);
 	timer_set_period(timer, 65535);
 
-	oc_setup(timer, TIM_OC1);
-	oc_setup(timer, TIM_OC2);
-	oc_setup(timer, TIM_OC3);
-	oc_setup(timer, TIM_OC4);
+	oc_setup(timer, TIM_OC1, polarity & 0x01);
+	oc_setup(timer, TIM_OC2, polarity & 0x02);
+	oc_setup(timer, TIM_OC3, polarity & 0x04);
+	oc_setup(timer, TIM_OC4, polarity & 0x08);
 
 	timer_enable_counter(timer);
 }
 static void pwm_setup(void) {
+  uint32_t polarity = config_get_uint32(CONFIG_LED_POLARITY);
 	// PA0
 	gpio_set_mode(GPIOA, GPIO_MODE_OUTPUT_50_MHZ,
 	    GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO_TIM2_CH1_ETR );
@@ -129,13 +134,13 @@ static void pwm_setup(void) {
 	gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_50_MHZ,
 	    GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO_TIM4_CH4 );
 
-	timer_setup(TIM2);
+	timer_setup(TIM2, polarity);
 	// wait a bit before starting next timer
 	// this way, the PWM pulses start at about 0, 33, 66% for R, G, B
 	while(timer_get_counter(TIM2) < (65535/3)) { /* wait */ };
-	timer_setup(TIM3);
+	timer_setup(TIM3, polarity);
 	while(timer_get_counter(TIM2) < (2*65535/3)) { /* wait */ };
-	timer_setup(TIM4);
+	timer_setup(TIM4, polarity);
 }
 
 static uint16_t values[4*3];
@@ -269,10 +274,31 @@ static void handle_GET_DATA(const uint8_t rbyte, const struct lbus_hdr *header, 
 				for(unsigned int i=0; i < header->length - p; i++)
 					lbus_send(firmware_config.name[i]);
 				break;
+      case LBUS_DATA_POLARITY: {
+					uint32_t lbus_polarity = config_get_uint32(CONFIG_LED_POLARITY);
+					lbus_send(lbus_polarity);
+				}
+				break;
 			default:
 				for(int i=p; i<header->length; i++) 
 					lbus_send(0);
 		}
+		lbus_end_pkg();
+	}
+}
+
+/* LBUS handler for SET_POLARITY request
+ *
+ * Will transmit back 1 status byte:
+ *  0: success
+ *  other: error storing address in config section in flash memory
+ */
+static void handle_SET_POLARITY(const uint8_t rbyte, const struct lbus_hdr *header, const unsigned int p) {
+	(void)header;
+	LBUS_HANDLE_COMPLETE(static struct lbus_SET_POLARITY, d, p, rbyte) {
+		lbus_start_tx();
+		int8_t result = config_set_uint32(CONFIG_LED_POLARITY, d.polarity);
+		lbus_send(result);
 		lbus_end_pkg();
 	}
 }
@@ -298,6 +324,8 @@ lbus_recv_func lbus_handler(const struct lbus_hdr *header) {
 			return handle_LED_SET_16BIT;
 		case LED_SET_8BIT:
 			return handle_LED_SET_8BIT;
+		case SET_POLARITY:
+			return handle_SET_POLARITY;
 		case RESET_TO_BOOTLOADER:
 			lbus_reset_to_bootloader();
 			break;
